@@ -13,6 +13,13 @@ interface GoogleUser {
   name: string;
   email: string;
   picture: string;
+  type: 'google' | 'local';
+}
+
+interface LocalAccount {
+  email: string;
+  password: string;
+  name: string;
 }
 
 interface FloatingNumber {
@@ -25,28 +32,75 @@ interface FloatingNumber {
 }
 
 const App: React.FC = () => {
+  // Auth States
   const [user, setUser] = useState<GoogleUser | null>(null);
-  const [isAuthChecking, setIsAuthChecking] = useState(true);
-  
-  const [gameState, setGameState] = useState<GameState>(() => {
-    try {
-      const saved = localStorage.getItem(SAVE_KEY);
-      if (saved) {
-        return JSON.parse(saved);
-      }
-    } catch (e) {
-      console.error("Failed to load save state:", e);
-    }
-    return INITIAL_STATE;
-  });
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
+  // Game States
+  const [gameState, setGameState] = useState<GameState>(INITIAL_STATE);
   const [offlineMessage, setOfflineMessage] = useState<string | null>(null);
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [floatingNumbers, setFloatingNumbers] = useState<FloatingNumber[]>([]);
+  
   const nextId = useRef(0);
   const audioContextRef = useRef<AudioContext | null>(null);
 
-  // --- LÓGICA DE LOGIN ---
+  // --- LÓGICA DE PERSISTÊNCIA POR USUÁRIO ---
+  const getUserSaveKey = (userEmail: string) => `${SAVE_KEY}_${userEmail}`;
+
+  const loadGameForUser = (userEmail: string) => {
+    try {
+      const saved = localStorage.getItem(getUserSaveKey(userEmail));
+      if (saved) {
+        setGameState(JSON.parse(saved));
+      } else {
+        setGameState(INITIAL_STATE);
+      }
+    } catch (e) {
+      setGameState(INITIAL_STATE);
+    }
+  };
+
+  // --- LÓGICA DE LOGIN LOCAL ---
+  const handleLocalRegister = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (!email || !password || !name) return setError("All fields are required");
+
+    const accounts: LocalAccount[] = JSON.parse(localStorage.getItem('aether_accounts') || '[]');
+    if (accounts.find(a => a.email === email)) return setError("Email already registered");
+
+    const newAccount = { email, password, name };
+    accounts.push(newAccount);
+    localStorage.setItem('aether_accounts', JSON.stringify(accounts));
+
+    const userData: GoogleUser = { email, name, picture: `https://api.dicebear.com/7.x/bottts/svg?seed=${email}`, type: 'local' };
+    setUser(userData);
+    localStorage.setItem('aether_user', JSON.stringify(userData));
+    loadGameForUser(email);
+  };
+
+  const handleLocalLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    const accounts: LocalAccount[] = JSON.parse(localStorage.getItem('aether_accounts') || '[]');
+    const account = accounts.find(a => a.email === email && a.password === password);
+
+    if (account) {
+      const userData: GoogleUser = { email: account.email, name: account.name, picture: `https://api.dicebear.com/7.x/bottts/svg?seed=${account.email}`, type: 'local' };
+      setUser(userData);
+      localStorage.setItem('aether_user', JSON.stringify(userData));
+      loadGameForUser(account.email);
+    } else {
+      setError("Invalid email or password");
+    }
+  };
+
+  // --- LÓGICA DE LOGIN GOOGLE ---
   const decodeJwt = (token: string) => {
     try {
       const base64Url = token.split('.')[1];
@@ -55,33 +109,32 @@ const App: React.FC = () => {
         return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
       }).join(''));
       return JSON.parse(jsonPayload);
-    } catch (e) {
-      return null;
-    }
+    } catch (e) { return null; }
   };
 
   const handleCredentialResponse = (response: any) => {
     const data = decodeJwt(response.credential);
     if (data) {
-      const userData = {
+      const userData: GoogleUser = {
         name: data.name,
         email: data.email,
-        picture: data.picture
+        picture: data.picture,
+        type: 'google'
       };
       setUser(userData);
       localStorage.setItem('aether_user', JSON.stringify(userData));
+      loadGameForUser(data.email);
     }
   };
 
   useEffect(() => {
-    // Tenta recuperar login salvo localmente
     const savedUser = localStorage.getItem('aether_user');
     if (savedUser) {
-      setUser(JSON.parse(savedUser));
+      const parsed = JSON.parse(savedUser);
+      setUser(parsed);
+      loadGameForUser(parsed.email);
     }
-    setIsAuthChecking(false);
 
-    // Inicializa o Google One Tap / Button
     const initGoogle = () => {
       if ((window as any).google) {
         (window as any).google.accounts.id.initialize({
@@ -96,7 +149,7 @@ const App: React.FC = () => {
             theme: 'filled_black',
             size: 'large',
             shape: 'pill',
-            width: 280
+            width: 320
           });
         }
       } else {
@@ -105,7 +158,7 @@ const App: React.FC = () => {
     };
 
     initGoogle();
-  }, [user]);
+  }, []);
 
   const handleLogout = () => {
     setUser(null);
@@ -113,15 +166,13 @@ const App: React.FC = () => {
     if ((window as any).google) (window as any).google.accounts.id.disableAutoSelect();
   };
 
-  // --- SONS E GAMEPLAY ---
+  // --- SONS E GAMEPLAY CORE ---
   const getAudioContext = useCallback(() => {
     if (!audioContextRef.current) {
       audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
     }
     const ctx = audioContextRef.current;
-    if (ctx.state === 'suspended') {
-      ctx.resume();
-    }
+    if (ctx.state === 'suspended') ctx.resume();
     return ctx;
   }, []);
 
@@ -136,11 +187,7 @@ const App: React.FC = () => {
     osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.5, now + 0.08);
     gain.gain.setValueAtTime(0.12, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
-    const noiseFilter = ctx.createBiquadFilter();
-    noiseFilter.type = 'lowpass';
-    noiseFilter.frequency.setValueAtTime(1200, now);
-    osc.connect(noiseFilter);
-    noiseFilter.connect(gain);
+    osc.connect(gain);
     gain.connect(ctx.destination);
     osc.start(now);
     osc.stop(now + 0.1);
@@ -149,39 +196,37 @@ const App: React.FC = () => {
   const playUpgradeSound = useCallback(() => {
     const ctx = getAudioContext();
     const now = ctx.currentTime;
-    const createNote = (freq: number, startTime: number, duration: number) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, startTime);
-      osc.frequency.exponentialRampToValueAtTime(freq * 1.5, startTime + duration);
-      gain.gain.setValueAtTime(0, startTime);
-      gain.gain.linearRampToValueAtTime(0.1, startTime + 0.05);
-      gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(startTime);
-      osc.stop(startTime + duration);
-    };
-    createNote(440, now, 0.4);
-    createNote(659.25, now + 0.05, 0.5);
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(440, now);
+    osc.frequency.exponentialRampToValueAtTime(660, now + 0.2);
+    gain.gain.setValueAtTime(0.1, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.2);
   }, [getAudioContext]);
 
+  // Added explicit generic type <number> to reduce to ensure correct inference of the accumulator
   const aps = UPGRADES
     .filter(u => u.type === 'auto')
-    .reduce((acc, u) => acc + (gameState.upgrades[u.id] || 0) * u.power, 0);
+    .reduce<number>((acc, u) => acc + (gameState.upgrades[u.id] || 0) * u.power, 0);
 
+  // Added explicit generic type <number> to reduce to ensure correct inference of the accumulator
   const apc = 1 + UPGRADES
     .filter(u => u.type === 'click')
-    .reduce((acc, u) => acc + (gameState.upgrades[u.id] || 0) * u.power, 0);
+    .reduce<number>((acc, u) => acc + (gameState.upgrades[u.id] || 0) * u.power, 0);
 
   const totalUpgrades = useMemo(() => 
-    (Object.values(gameState.upgrades) as number[]).reduce((a: number, b: number) => a + b, 0),
+    Object.values(gameState.upgrades).reduce((a, b) => a + b, 0),
     [gameState.upgrades]
   );
   
   const evolutionIntensity = Math.min(1, totalUpgrades / 300);
 
+  // Offline earnings on login
   useEffect(() => {
     if (!user) return;
     const lastSave = gameState.lastSave;
@@ -195,32 +240,32 @@ const App: React.FC = () => {
         totalAetherEarned: prev.totalAetherEarned + earned,
         lastSave: now
       }));
-      setOfflineMessage(`Welcome back, ${user.name.split(' ')[0]}. The system generated ${formatNumber(earned)} Aether while you were offline.`);
+      setOfflineMessage(`Neural synchronization complete. Captured ${formatNumber(earned)} Aether while detached.`);
       setTimeout(() => setOfflineMessage(null), 8000);
     }
   }, [user]);
 
+  // Game Loop
   useEffect(() => {
     if (!user) return;
     const interval = setInterval(() => {
-      setGameState(prev => {
-        const delta = aps / 10;
-        return {
-          ...prev,
-          aether: prev.aether + delta,
-          totalAetherEarned: prev.totalAetherEarned + delta,
-        };
-      });
+      // Added explicit GameState type to the functional update parameter 'prev' to fix the 'unknown' operator error
+      setGameState((prev: GameState) => ({
+        ...prev,
+        aether: prev.aether + aps / 10,
+        totalAetherEarned: prev.totalAetherEarned + aps / 10,
+      }));
     }, 100);
     return () => clearInterval(interval);
   }, [aps, user]);
 
+  // Auto-save
   useEffect(() => {
     if (!user) return;
     const saveInterval = setInterval(() => {
       setGameState(prev => {
         const stateToSave = { ...prev, lastSave: Date.now() };
-        localStorage.setItem(SAVE_KEY, JSON.stringify(stateToSave));
+        localStorage.setItem(getUserSaveKey(user.email), JSON.stringify(stateToSave));
         return stateToSave;
       });
       setShowSaveToast(true);
@@ -231,7 +276,8 @@ const App: React.FC = () => {
 
   const handleManualClick = useCallback((e: React.MouseEvent) => {
     playClickSound();
-    setGameState(prev => {
+    // Added explicit typing to ensure robustness during manual clicks
+    setGameState((prev: GameState) => {
       const newState = {
         ...prev,
         aether: prev.aether + apc,
@@ -239,57 +285,97 @@ const App: React.FC = () => {
         clickCount: prev.clickCount + 1,
         lastSave: Date.now()
       };
-      localStorage.setItem(SAVE_KEY, JSON.stringify(newState));
+      if (user) localStorage.setItem(getUserSaveKey(user.email), JSON.stringify(newState));
       return newState;
     });
     const id = nextId.current++;
     setFloatingNumbers(prev => [...prev, { id, x: e.clientX, y: e.clientY, val: apc, rotation: (Math.random() * 30) - 15, driftX: (Math.random() * 60) - 30 }]);
     setTimeout(() => setFloatingNumbers(prev => prev.filter(f => f.id !== id)), 1200);
-  }, [apc, playClickSound]);
+  }, [apc, playClickSound, user]);
 
   const handlePurchase = useCallback((upgradeId: string) => {
     const upgrade = UPGRADES.find(u => u.id === upgradeId);
-    if (!upgrade) return;
+    if (!upgrade || !user) return;
     const currentLevel = gameState.upgrades[upgradeId] || 0;
-    // Fix: Correctly using currentLevel to calculate the upgrade cost and removing the reference to non-existent 'level'
     const actualCost = Math.floor(upgrade.baseCost * Math.pow(upgrade.costMultiplier, currentLevel));
     if (gameState.aether >= actualCost) {
       playUpgradeSound();
-      setGameState(prev => {
+      setGameState((prev: GameState) => {
         const newState = {
           ...prev,
           aether: prev.aether - actualCost,
           upgrades: { ...prev.upgrades, [upgradeId]: (prev.upgrades[upgradeId] || 0) + 1 },
           lastSave: Date.now()
         };
-        localStorage.setItem(SAVE_KEY, JSON.stringify(newState));
+        localStorage.setItem(getUserSaveKey(user.email), JSON.stringify(newState));
         return newState;
       });
     }
-  }, [gameState.aether, gameState.upgrades, playUpgradeSound]);
+  }, [gameState.aether, gameState.upgrades, playUpgradeSound, user]);
 
-  // --- TELA DE LOGIN ---
+  // --- COMPONENTES DE UI DE LOGIN ---
   if (!user) {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center bg-[#030305] text-white relative overflow-hidden">
+      <div className="min-h-screen w-full flex items-center justify-center bg-[#030305] text-white relative overflow-hidden p-6">
         <div className="absolute top-[-10%] left-[-5%] w-[800px] h-[800px] bg-blue-600/[0.05] rounded-full blur-[160px] animate-pulse" />
         <div className="absolute bottom-[0%] right-[-5%] w-[600px] h-[600px] bg-indigo-600/[0.05] rounded-full blur-[140px]" />
         
-        <div className="glass p-12 rounded-[40px] max-w-md w-full flex flex-col items-center text-center relative z-10 border-white/10 shadow-2xl">
-          <div className="w-20 h-20 rounded-3xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-8 shadow-[0_0_30px_rgba(59,130,246,0.2)]">
-            <span className="text-3xl">∿</span>
+        <div className="glass p-8 md:p-12 rounded-[40px] max-w-lg w-full flex flex-col items-center relative z-10 border-white/10 shadow-2xl animate-in zoom-in-95 duration-500">
+          <div className="w-16 h-16 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-6">
+            <span className="text-2xl">∿</span>
           </div>
           
-          <h1 className="text-4xl font-extralight tracking-tighter mb-4 text-gradient">Aether OS</h1>
-          <p className="text-zinc-500 text-sm uppercase tracking-[0.3em] font-bold mb-10">Authorize Neural Link</p>
+          <h1 className="text-3xl font-extralight tracking-tighter mb-1 text-gradient">Aether OS</h1>
+          <p className="text-zinc-500 text-[10px] uppercase tracking-[0.4em] font-bold mb-8">Authorization Protocol</p>
           
-          <div className="w-full h-px bg-white/5 mb-10" />
+          <form className="w-full flex flex-col gap-4 mb-8" onSubmit={authMode === 'login' ? handleLocalLogin : handleLocalRegister}>
+            {authMode === 'register' && (
+              <input 
+                type="text" 
+                placeholder="Operational Name" 
+                className="bg-white/5 border border-white/10 rounded-2xl px-5 py-3.5 text-sm focus:outline-none focus:border-blue-500/50 transition-all placeholder:text-zinc-600"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            )}
+            <input 
+              type="email" 
+              placeholder="Neural Identifier (Email)" 
+              className="bg-white/5 border border-white/10 rounded-2xl px-5 py-3.5 text-sm focus:outline-none focus:border-blue-500/50 transition-all placeholder:text-zinc-600"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+            <input 
+              type="password" 
+              placeholder="Security Key" 
+              className="bg-white/5 border border-white/10 rounded-2xl px-5 py-3.5 text-sm focus:outline-none focus:border-blue-500/50 transition-all placeholder:text-zinc-600"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            
+            {error && <p className="text-rose-500 text-[10px] font-bold uppercase tracking-widest text-center mt-2 animate-pulse">{error}</p>}
+
+            <button type="submit" className="mt-2 bg-white text-black font-bold text-xs uppercase tracking-widest py-4 rounded-2xl hover:bg-zinc-200 active:scale-[0.98] transition-all">
+              {authMode === 'login' ? 'Establish Connection' : 'Register Identifier'}
+            </button>
+          </form>
+
+          <div className="w-full flex items-center gap-4 mb-8">
+            <div className="h-px flex-1 bg-white/5" />
+            <span className="text-[10px] uppercase tracking-widest text-zinc-600 font-bold">Or Neural Link</span>
+            <div className="h-px flex-1 bg-white/5" />
+          </div>
+
+          <div id="google-btn-container" className="mb-8 overflow-hidden rounded-full"></div>
           
-          <div id="google-btn-container" className="mb-8"></div>
-          
-          <p className="text-[10px] text-zinc-600 tracking-widest leading-relaxed px-4">
-            By connecting, you authorize Aether OS to synchronize your progress across the universal stream.
-          </p>
+          <div className="flex gap-4">
+            <button 
+              onClick={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setError(null); }} 
+              className="text-[10px] text-zinc-500 hover:text-white uppercase tracking-widest font-bold transition-colors"
+            >
+              {authMode === 'login' ? 'Need an Identifier?' : 'Have an Account?'}
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -298,18 +384,18 @@ const App: React.FC = () => {
   // --- TELA DO JOGO ---
   return (
     <div className="min-h-screen w-full flex flex-col md:flex-row bg-[#030305] text-zinc-100 selection:bg-blue-500/30 overflow-x-hidden">
+      {/* HUD Header */}
       <div className="fixed top-4 right-4 z-[60] flex items-center gap-3 glass p-1.5 pl-4 rounded-full border-white/5 shadow-xl">
         <div className="flex flex-col items-end">
           <span className="text-[10px] text-zinc-400 font-bold tracking-tight">{user.name}</span>
-          <button onClick={handleLogout} className="text-[8px] uppercase tracking-widest text-blue-400 font-black hover:text-white transition-colors">Terminate Link</button>
+          <button onClick={handleLogout} className="text-[8px] uppercase tracking-widest text-blue-400 font-black hover:text-white transition-colors">Disconnect</button>
         </div>
-        <img src={user.picture} alt="Avatar" className="w-8 h-8 rounded-full border border-white/10" />
+        <img src={user.picture} alt="Avatar" className="w-8 h-8 rounded-full border border-white/10 bg-zinc-900" />
       </div>
 
       <div className="fixed inset-0 pointer-events-none z-0">
           <div className="absolute top-[-10%] left-[-5%] w-[800px] h-[800px] bg-blue-600/[0.03] rounded-full blur-[160px] animate-pulse" />
           <div className="absolute bottom-[0%] right-[-5%] w-[600px] h-[600px] bg-indigo-600/[0.03] rounded-full blur-[140px]" />
-          <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.15] mix-blend-overlay" />
       </div>
 
       <div className="fixed inset-0 pointer-events-none z-[100]">
@@ -322,8 +408,8 @@ const App: React.FC = () => {
 
       {showSaveToast && (
         <div className="fixed bottom-6 left-6 z-[60] glass px-4 py-2 rounded-lg border border-white/5 shadow-2xl animate-in slide-in-from-bottom-4 fade-in duration-500 flex items-center gap-3">
-          <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse shadow-[0_0_8px_rgba(96,165,250,0.8)]" />
-          <span className="text-[10px] uppercase tracking-[0.25em] font-bold text-zinc-400">Sync Complete</span>
+          <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+          <span className="text-[10px] uppercase tracking-[0.25em] font-bold text-zinc-400">Stream Sync</span>
         </div>
       )}
 
@@ -336,52 +422,36 @@ const App: React.FC = () => {
       <main className="flex-1 flex flex-col items-center justify-center p-6 relative z-10 min-h-[60vh] md:min-h-screen">
         <Stats aether={gameState.aether} aps={aps} apc={apc} />
         <Orb onClick={handleManualClick} intensity={evolutionIntensity} />
-        <div className="mt-12 md:mt-20 flex flex-col items-center gap-3 opacity-30 group cursor-help">
-            <span className="text-[10px] uppercase tracking-[0.5em] font-bold transition-all group-hover:tracking-[0.6em]">Aether Stream Sync</span>
-            <div className="flex gap-2">
-                {[...Array(5)].map((_, i) => (
-                    <div key={i} className="w-1.5 h-1.5 rounded-full bg-blue-400/50 animate-pulse" style={{ animationDelay: `${i * 0.15}s` }} />
-                ))}
-            </div>
-        </div>
       </main>
 
       <aside className="w-full md:w-[460px] glass md:border-l border-white/[0.05] flex flex-col h-[60vh] md:h-screen relative z-20 shadow-[-20px_0_50px_rgba(0,0,0,0.5)]">
         <div className="p-6 md:p-10 border-b border-white/[0.03] bg-white/[0.01]">
             <div className="flex items-center justify-between mb-2">
-                <h2 className="text-xl md:text-2xl font-extralight tracking-tight text-white/90">Optimization</h2>
-                <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-blue-500/5 border border-blue-500/10">
-                    <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse shadow-[0_0_8px_rgba(96,165,250,0.6)]" />
-                    <span className="text-[10px] uppercase tracking-[0.2em] text-blue-400 font-black">Link Active</span>
+                <h2 className="text-xl md:text-2xl font-extralight tracking-tight text-white/90">Optimizations</h2>
+                <div className="px-3 py-1.5 rounded-full bg-blue-500/5 border border-blue-500/10">
+                    <span className="text-[10px] uppercase tracking-[0.2em] text-blue-400 font-black">Matrix Live</span>
                 </div>
             </div>
-            <p className="text-[11px] text-zinc-500 font-bold tracking-widest uppercase opacity-70">Enhance the energy extraction matrix</p>
+            <p className="text-[11px] text-zinc-500 font-bold tracking-widest uppercase opacity-70">Expand your extraction capabilities</p>
         </div>
 
-        <div className="flex-1 relative min-h-0 flex flex-col">
-            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 scroll-smooth touch-pan-y" style={{ touchAction: 'pan-y' }}>
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
             {UPGRADES.map(upgrade => (
                 <UpgradeCard key={upgrade.id} upgrade={upgrade} level={gameState.upgrades[upgrade.id] || 0} currentAether={gameState.aether} onPurchase={handlePurchase} />
             ))}
-            </div>
-            <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-black/40 to-transparent pointer-events-none z-10 opacity-60 md:opacity-40" />
         </div>
 
         <div className="p-6 md:p-10 border-t border-white/[0.03] bg-black/60 backdrop-blur-3xl">
-            <div className="mb-6 md:mb-8 group">
-                <div className="flex justify-between text-[10px] uppercase tracking-[0.3em] text-zinc-600 mb-4 font-black group-hover:text-zinc-400 transition-colors">
-                    <span>System Maturity Index</span>
+            <div className="mb-6 group">
+                <div className="flex justify-between text-[10px] uppercase tracking-[0.3em] text-zinc-600 mb-4 font-black">
+                    <span>Maturity Index</span>
                     <span className="text-zinc-400">{Math.min(100, (gameState.totalAetherEarned / 10000000) * 100).toFixed(2)}%</span>
                 </div>
                 <div className="w-full h-1 bg-white/[0.03] rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-blue-700 via-blue-500 to-indigo-600 transition-all duration-1000 ease-out shadow-[0_0_15px_rgba(59,130,246,0.3)]" style={{ width: `${Math.min(100, (gameState.totalAetherEarned / 10000000) * 100)}%` }} />
+                    <div className="h-full bg-gradient-to-r from-blue-700 to-indigo-600 transition-all duration-1000" style={{ width: `${Math.min(100, (gameState.totalAetherEarned / 10000000) * 100)}%` }} />
                 </div>
             </div>
-            
-            <div className="flex items-center justify-between opacity-50 hover:opacity-100 transition-opacity">
-                 <button onClick={() => { if(confirm('TERMINATION PROTOCOL: This will permanently wipe all neural links and reset the Aether pool. Proceed?')) { localStorage.removeItem(SAVE_KEY); window.location.reload(); } }} className="group flex items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-zinc-600 hover:text-red-500 transition-all duration-300 font-black">Reset Connection</button>
-                <div className="text-[10px] text-zinc-800 font-mono font-black tracking-widest">AETHER.v1.0.8.OS</div>
-            </div>
+            <div className="text-[10px] text-zinc-800 font-mono font-black tracking-widest text-center">AETHER.v1.0.8.HYBRID</div>
         </div>
       </aside>
     </div>
