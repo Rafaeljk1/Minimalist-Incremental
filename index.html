@@ -8,6 +8,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <!-- Google Identity Services Script -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -29,12 +31,10 @@
         }
         @keyframes float {
             0% { 
-                /* Instant appearance: transparent (opacity 0.7), perfectly crisp */
                 transform: translate(-50%, 0px) scale(1) rotate(calc(var(--rotation) * 1deg)); 
                 opacity: 0.7; 
             }
             100% { 
-                /* Direct increase in size (scale 1.8) and height, fading to 0, remaining crisp */
                 transform: translate(calc(-50% + var(--drift-x) * 1px), -280px) scale(1.8) rotate(calc(var(--rotation) * 2deg)); 
                 opacity: 0; 
             }
@@ -42,11 +42,9 @@
         .floating-number {
             position: absolute;
             pointer-events: none;
-            /* Using a clean ease-out for direct, non-blurred ascent */
             animation: float 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
             font-weight: 700;
             color: rgba(255, 255, 255, 0.9);
-            /* Minimal glow shadow to maintain crisp edges while still feeling high-end */
             text-shadow: 0 0 10px rgba(59, 130, 246, 0.4);
             z-index: 100;
             white-space: nowrap;
@@ -72,7 +70,6 @@
             0%, 100% { transform: scale(1); opacity: 0.2; }
             50% { transform: scale(1.1); opacity: 0.35; }
         }
-        /* Touch scroll improvement */
         * {
             -webkit-overflow-scrolling: touch;
         }
