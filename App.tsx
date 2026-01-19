@@ -37,6 +37,14 @@ interface LogEntry {
   type: 'info' | 'success' | 'warning';
 }
 
+// Memoized background to prevent flickering on re-renders
+const Background = React.memo(() => (
+  <div className="fixed inset-0 pointer-events-none z-0">
+    <div className="absolute top-[-10%] left-[-5%] w-[800px] h-[800px] bg-blue-600/[0.03] rounded-full blur-[160px] animate-pulse" />
+    <div className="absolute bottom-[0%] right-[-5%] w-[600px] h-[600px] bg-indigo-600/[0.03] rounded-full blur-[140px]" />
+  </div>
+));
+
 const App: React.FC = () => {
   // Auth States
   const [user, setUser] = useState<GoogleUser | null>(null);
@@ -50,6 +58,7 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<'core' | 'sync' | 'achievements' | 'settings' | 'log'>('core');
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [clickTrigger, setClickTrigger] = useState(0);
 
   // Game States
   const [gameState, setGameState] = useState<GameState>(INITIAL_STATE);
@@ -95,7 +104,7 @@ const App: React.FC = () => {
       return;
     }
 
-    const accounts: LocalAccount[] = JSON.parse(localStorage.getItem('aether_accounts') || '[]');
+    const accounts: LocalAccount[] = JSON.parse(localStorage.getItem('multiclick_accounts') || '[]');
     if (accounts.find(a => a.email === email)) {
       setError("Email already registered");
       return;
@@ -103,7 +112,7 @@ const App: React.FC = () => {
 
     const newAccount = { email, password, name };
     accounts.push(newAccount);
-    localStorage.setItem('aether_accounts', JSON.stringify(accounts));
+    localStorage.setItem('multiclick_accounts', JSON.stringify(accounts));
 
     const userData: GoogleUser = { 
       email, 
@@ -112,14 +121,14 @@ const App: React.FC = () => {
       type: 'local' 
     };
     setUser(userData);
-    localStorage.setItem('aether_user', JSON.stringify(userData));
+    localStorage.setItem('multiclick_user', JSON.stringify(userData));
     loadGameForUser(email);
   };
 
   const handleLocalLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    const accounts: LocalAccount[] = JSON.parse(localStorage.getItem('aether_accounts') || '[]');
+    const accounts: LocalAccount[] = JSON.parse(localStorage.getItem('multiclick_accounts') || '[]');
     const account = accounts.find(a => a.email === email && a.password === password);
 
     if (account) {
@@ -130,7 +139,7 @@ const App: React.FC = () => {
         type: 'local' 
       };
       setUser(userData);
-      localStorage.setItem('aether_user', JSON.stringify(userData));
+      localStorage.setItem('multiclick_user', JSON.stringify(userData));
       loadGameForUser(account.email);
     } else {
       setError("Invalid email or password");
@@ -158,13 +167,13 @@ const App: React.FC = () => {
         type: 'google'
       };
       setUser(userData);
-      localStorage.setItem('aether_user', JSON.stringify(userData));
+      localStorage.setItem('multiclick_user', JSON.stringify(userData));
       loadGameForUser(data.email);
     }
   };
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('aether_user');
+    const savedUser = localStorage.getItem('multiclick_user');
     if (savedUser) {
       const parsed = JSON.parse(savedUser);
       setUser(parsed);
@@ -199,7 +208,7 @@ const App: React.FC = () => {
 
   const handleLogout = () => {
     setUser(null);
-    localStorage.removeItem('aether_user');
+    localStorage.removeItem('multiclick_user');
     const g = (window as any).google;
     if (g && g.accounts) g.accounts.id.disableAutoSelect();
     addLog("Neural connection severed.", "warning");
@@ -265,6 +274,19 @@ const App: React.FC = () => {
   
   const evolutionIntensity = Math.min(1, totalUpgrades / 300);
 
+  // Use fixed time interval for idle gains (100ms)
+  useEffect(() => {
+    if (!user || aps <= 0) return;
+    const interval = setInterval(() => {
+      setGameState((prev: GameState) => ({
+        ...prev,
+        aether: prev.aether + (aps / 10),
+        totalAetherEarned: prev.totalAetherEarned + (aps / 10),
+      }));
+    }, 100);
+    return () => clearInterval(interval);
+  }, [aps, user]);
+
   useEffect(() => {
     if (!user) return;
     const lastSave = gameState.lastSave;
@@ -286,18 +308,6 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!user) return;
-    const interval = setInterval(() => {
-      setGameState((prev: GameState) => ({
-        ...prev,
-        aether: prev.aether + (aps / 10),
-        totalAetherEarned: prev.totalAetherEarned + (aps / 10),
-      }));
-    }, 100);
-    return () => clearInterval(interval);
-  }, [aps, user]);
-
-  useEffect(() => {
-    if (!user) return;
     const saveInterval = setInterval(() => {
       setGameState((prev) => {
         const stateToSave = { ...prev, lastSave: Date.now() };
@@ -312,6 +322,7 @@ const App: React.FC = () => {
 
   const handleManualClick = useCallback((e: React.MouseEvent) => {
     playClickSound();
+    setClickTrigger(t => t + 1); // Only triggers manual pulse
     setGameState((prev: GameState) => {
       const newState = {
         ...prev,
@@ -392,14 +403,13 @@ const App: React.FC = () => {
   if (!user) {
     return (
       <div className="min-h-screen w-full flex items-center justify-center bg-[#030305] text-white relative overflow-hidden p-6">
-        <div className="absolute top-[-10%] left-[-5%] w-[800px] h-[800px] bg-blue-600/[0.05] rounded-full blur-[160px] animate-pulse" />
-        <div className="absolute bottom-[0%] right-[-5%] w-[600px] h-[600px] bg-indigo-600/[0.05] rounded-full blur-[140px]" />
+        <Background />
         
         <div className="glass p-8 md:p-12 rounded-[40px] max-w-lg w-full flex flex-col items-center relative z-10 border-white/10 shadow-2xl animate-in zoom-in-95 duration-500">
           <div className="w-16 h-16 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-6">
             <span className="text-2xl">∿</span>
           </div>
-          <h1 className="text-3xl font-extralight tracking-tighter mb-1 text-gradient">Aether OS</h1>
+          <h1 className="text-3xl font-extralight tracking-tighter mb-1 text-gradient">Multiclick OS</h1>
           <p className="text-zinc-500 text-[10px] uppercase tracking-[0.4em] font-bold mb-8">Authorization Protocol</p>
           <form className="w-full flex flex-col gap-4 mb-8" onSubmit={authMode === 'login' ? handleLocalLogin : handleLocalRegister}>
             {authMode === 'register' && (
@@ -448,7 +458,7 @@ const App: React.FC = () => {
       case 'core':
         return (
           <div className="flex-1 flex flex-col items-center justify-center p-6 relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <Stats aether={gameState.aether} aps={aps} apc={apc} />
+            <Stats aether={gameState.aether} aps={aps} apc={apc} clickTrigger={clickTrigger} />
             <Orb onClick={handleManualClick} intensity={evolutionIntensity} />
           </div>
         );
@@ -608,7 +618,7 @@ const App: React.FC = () => {
              <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
                 <span className="text-lg">∿</span>
               </div>
-              <span className="text-lg font-extralight tracking-tighter text-white">Aether OS</span>
+              <span className="text-lg font-extralight tracking-tighter text-white">Multiclick OS</span>
           </div>
           <button 
             onClick={() => setIsSidebarOpen(false)}
@@ -678,10 +688,7 @@ const App: React.FC = () => {
         <img src={user.picture} alt="Avatar" className="w-10 h-10 rounded-full border border-white/10 bg-zinc-900 group-hover:border-blue-500/50 transition-colors" />
       </div>
 
-      <div className="fixed inset-0 pointer-events-none z-0">
-          <div className="absolute top-[-10%] left-[-5%] w-[800px] h-[800px] bg-blue-600/[0.03] rounded-full blur-[160px] animate-pulse" />
-          <div className="absolute bottom-[0%] right-[-5%] w-[600px] h-[600px] bg-indigo-600/[0.03] rounded-full blur-[140px]" />
-      </div>
+      <Background />
 
       <div className="fixed inset-0 pointer-events-none z-[100]">
         {floatingNumbers.map((f) => (
@@ -708,35 +715,37 @@ const App: React.FC = () => {
         {renderSection()}
       </main>
 
-      {/* Upgrades panel is mostly constant, except maybe in focused log or settings views */}
-      <aside className={`w-full md:w-[460px] glass md:border-l border-white/[0.05] flex flex-col h-[60vh] md:h-screen relative z-20 shadow-[-20px_0_50px_rgba(0,0,0,0.5)] transition-all duration-500 ${activeSection === 'core' ? 'translate-x-0 opacity-100' : 'md:opacity-40 pointer-events-none md:translate-x-8'}`}>
-        <div className="p-6 md:p-10 border-b border-white/[0.03] bg-white/[0.01]">
-            <div className="flex items-center justify-between mb-2">
-                <h2 className="text-xl md:text-2xl font-extralight tracking-tight text-white/90">Optimizations</h2>
-                <div className="px-3 py-1.5 rounded-full bg-blue-500/5 border border-blue-500/10">
-                    <span className="text-[10px] uppercase tracking-[0.2em] text-blue-400 font-black">Matrix Live</span>
-                </div>
-            </div>
-            <p className="text-[11px] text-zinc-500 font-bold tracking-widest uppercase opacity-70">Expand your extraction capabilities</p>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
-            {UPGRADES.map((upgrade) => (
-                <UpgradeCard key={upgrade.id} upgrade={upgrade} level={gameState.upgrades[upgrade.id] || 0} currentAether={gameState.aether} onPurchase={handlePurchase} />
-            ))}
-        </div>
-        <div className="p-6 md:p-10 border-t border-white/[0.03] bg-black/60 backdrop-blur-3xl">
-            <div className="mb-6 group">
-                <div className="flex justify-between text-[10px] uppercase tracking-[0.3em] text-zinc-600 mb-4 font-black">
-                    <span>Maturity Index</span>
-                    <span className="text-zinc-400">{Math.min(100, (gameState.totalAetherEarned / 10000000) * 100).toFixed(2)}%</span>
-                </div>
-                <div className="w-full h-1 bg-white/[0.03] rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-blue-700 to-indigo-600 transition-all duration-1000" style={{ width: `${Math.min(100, (gameState.totalAetherEarned / 10000000) * 100)}%` }} />
-                </div>
-            </div>
-            <div className="text-[10px] text-zinc-800 font-mono font-black tracking-widest text-center">AETHER.v1.0.8.HYBRID</div>
-        </div>
-      </aside>
+      {/* Upgrades panel is only shown when on the main Neural Core section */}
+      {activeSection === 'core' && (
+        <aside className="w-full md:w-[460px] glass md:border-l border-white/[0.05] flex flex-col h-[60vh] md:h-screen relative z-20 shadow-[-20px_0_50px_rgba(0,0,0,0.5)] animate-in slide-in-from-right duration-500">
+          <div className="p-6 md:p-10 border-b border-white/[0.03] bg-white/[0.01]">
+              <div className="flex items-center justify-between mb-2">
+                  <h2 className="text-xl md:text-2xl font-extralight tracking-tight text-white/90">Optimizations</h2>
+                  <div className="px-3 py-1.5 rounded-full bg-blue-500/5 border border-blue-500/10">
+                      <span className="text-[10px] uppercase tracking-[0.2em] text-blue-400 font-black">Matrix Live</span>
+                  </div>
+              </div>
+              <p className="text-[11px] text-zinc-500 font-bold tracking-widest uppercase opacity-70">Expand your extraction capabilities</p>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
+              {UPGRADES.map((upgrade) => (
+                  <UpgradeCard key={upgrade.id} upgrade={upgrade} level={gameState.upgrades[upgrade.id] || 0} currentAether={gameState.aether} onPurchase={handlePurchase} />
+              ))}
+          </div>
+          <div className="p-6 md:p-10 border-t border-white/[0.03] bg-black/60 backdrop-blur-3xl">
+              <div className="mb-6 group">
+                  <div className="flex justify-between text-[10px] uppercase tracking-[0.3em] text-zinc-600 mb-4 font-black">
+                      <span>Maturity Index</span>
+                      <span className="text-zinc-400">{Math.min(100, (gameState.totalAetherEarned / 10000000) * 100).toFixed(2)}%</span>
+                  </div>
+                  <div className="w-full h-1 bg-white/[0.03] rounded-full overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-blue-700 to-indigo-600 transition-all duration-1000" style={{ width: `${Math.min(100, (gameState.totalAetherEarned / 10000000) * 100)}%` }} />
+                  </div>
+              </div>
+              <div className="text-[10px] text-zinc-800 font-mono font-black tracking-widest text-center">MULTICLICK.v1.0.8.HYBRID</div>
+          </div>
+        </aside>
+      )}
     </div>
   );
 };
