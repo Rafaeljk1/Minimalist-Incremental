@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -30,27 +29,28 @@
         }
         @keyframes float {
             0% { 
-                transform: translateY(0px) scale(0.5); 
-                opacity: 0; 
-            }
-            15% {
-                transform: translateY(-10px) scale(1.2);
-                opacity: 1;
+                /* Instant appearance: transparent (opacity 0.7), perfectly crisp */
+                transform: translate(-50%, 0px) scale(1) rotate(calc(var(--rotation) * 1deg)); 
+                opacity: 0.7; 
             }
             100% { 
-                transform: translateY(-140px) scale(1); 
+                /* Direct increase in size (scale 1.8) and height, fading to 0, remaining crisp */
+                transform: translate(calc(-50% + var(--drift-x) * 1px), -280px) scale(1.8) rotate(calc(var(--rotation) * 2deg)); 
                 opacity: 0; 
             }
         }
         .floating-number {
             position: absolute;
             pointer-events: none;
-            animation: float 1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-            font-weight: 600;
-            color: #ffffff;
-            text-shadow: 0 0 20px rgba(59, 130, 246, 0.8), 0 0 40px rgba(59, 130, 246, 0.4);
+            /* Using a clean ease-out for direct, non-blurred ascent */
+            animation: float 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+            font-weight: 700;
+            color: rgba(255, 255, 255, 0.9);
+            /* Minimal glow shadow to maintain crisp edges while still feeling high-end */
+            text-shadow: 0 0 10px rgba(59, 130, 246, 0.4);
             z-index: 100;
             white-space: nowrap;
+            will-change: transform, opacity;
         }
         ::-webkit-scrollbar {
             width: 5px;
@@ -72,7 +72,7 @@
             0%, 100% { transform: scale(1); opacity: 0.2; }
             50% { transform: scale(1.1); opacity: 0.35; }
         }
-        /* Melhora a rolagem em dispositivos touch */
+        /* Touch scroll improvement */
         * {
             -webkit-overflow-scrolling: touch;
         }
