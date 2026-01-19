@@ -1,5 +1,4 @@
-
-import React from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 
 interface StatsProps {
   aether: number;
@@ -19,28 +18,68 @@ export const formatNumber = (num: number): string => {
 };
 
 const Stats: React.FC<StatsProps> = ({ aether, aps, apc }) => {
+  const [isPulsing, setIsPulsing] = useState(false);
+  const prevAether = useRef(aether);
+
+  useEffect(() => {
+    // Detect increase to trigger the pulse effect
+    if (aether > prevAether.current) {
+      setIsPulsing(true);
+      const timer = setTimeout(() => setIsPulsing(false), 80);
+      prevAether.current = aether;
+      return () => clearTimeout(timer);
+    }
+    prevAether.current = aether;
+  }, [aether]);
+
+  // Calculate a "flow intensity" for the APS indicator pulse
+  const flowIntensity = Math.min(1, aps / 1000000); // Max intensity reached at 1M APS
+  const flowPulseDuration = Math.max(0.5, 3 - flowIntensity * 2.5); // Faster pulse as APS increases (3s to 0.5s)
+
   return (
     <div className="flex flex-col items-center gap-2 mb-16 select-none animate-in fade-in duration-1000">
-      <div className="flex flex-col items-center">
-        <span className="text-[10px] uppercase tracking-[0.4em] text-zinc-500 font-bold mb-3 opacity-60">
+      <div className="flex flex-col items-center relative">
+        {/* Subtle background glow that pulses with the aether increase */}
+        <div 
+          className={`absolute inset-0 bg-blue-500/10 blur-[60px] rounded-full transition-opacity duration-300 ${isPulsing ? 'opacity-100 scale-125' : 'opacity-0 scale-100'}`} 
+        />
+        
+        <span className="text-[10px] uppercase tracking-[0.4em] text-zinc-500 font-bold mb-3 opacity-60 relative z-10">
           Neural Energy Reserve
         </span>
-        <h1 className="text-6xl sm:text-8xl font-extralight tracking-tighter text-white text-gradient">
+        
+        <h1 
+          className={`text-6xl sm:text-8xl font-extralight tracking-tighter text-white text-gradient relative z-10 transition-all duration-75 ease-out
+            ${isPulsing ? 'scale-[1.015] brightness-125 drop-shadow-[0_0_20px_rgba(59,130,246,0.3)]' : 'scale-100 brightness-100'}
+          `}
+        >
           {formatNumber(aether)}
         </h1>
       </div>
       
-      <div className="flex gap-16 mt-8">
-        <div className="flex flex-col items-center group">
+      <div className="flex gap-16 mt-8 relative">
+        {/* Flow Rate Stat */}
+        <div className="flex flex-col items-center group relative">
           <span className="text-[9px] uppercase tracking-[0.2em] text-zinc-600 mb-1 font-bold group-hover:text-blue-400/50 transition-colors">Flow Rate</span>
-          <span className="text-lg text-blue-400 font-light font-mono">
-            +{formatNumber(aps)}<span className="text-[10px] ml-1 opacity-40">/S</span>
-          </span>
+          <div className="relative">
+             <span className="text-lg text-blue-400 font-light font-mono relative z-10">
+              +{formatNumber(aps)}<span className="text-[10px] ml-1 opacity-40">/S</span>
+            </span>
+            {/* Ambient pulse around the APS */}
+            <div 
+              className="absolute inset-0 bg-blue-400/20 blur-xl rounded-full animate-pulse pointer-events-none"
+              style={{ animationDuration: `${flowPulseDuration}s` }}
+            />
+          </div>
         </div>
+
+        {/* Separator */}
         <div className="w-px h-12 bg-white/5 self-center rotate-12" />
+
+        {/* Resonance Stat */}
         <div className="flex flex-col items-center group">
           <span className="text-[9px] uppercase tracking-[0.2em] text-zinc-600 mb-1 font-bold group-hover:text-zinc-400 transition-colors">Resonance</span>
-          <span className="text-lg text-zinc-300 font-light font-mono">
+          <span className={`text-lg transition-all duration-150 font-light font-mono ${isPulsing ? 'text-white' : 'text-zinc-300'}`}>
             +{formatNumber(apc)}<span className="text-[10px] ml-1 opacity-40">/C</span>
           </span>
         </div>

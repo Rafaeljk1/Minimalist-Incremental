@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { GameState } from './types.ts';
+import { GameState, Upgrade } from './types.ts';
 import { UPGRADES, INITIAL_STATE, SAVE_KEY } from './constants.ts';
 import Stats, { formatNumber } from './components/Stats.tsx';
 import Orb from './components/Orb.tsx';
@@ -40,6 +39,9 @@ const App: React.FC = () => {
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  // UI States
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
   // Game States
   const [gameState, setGameState] = useState<GameState>(INITIAL_STATE);
   const [offlineMessage, setOfflineMessage] = useState<string | null>(null);
@@ -49,7 +51,6 @@ const App: React.FC = () => {
   const nextId = useRef(0);
   const audioContextRef = useRef<AudioContext | null>(null);
 
-  // --- LÓGICA DE PERSISTÊNCIA POR USUÁRIO ---
   const getUserSaveKey = (userEmail: string) => `${SAVE_KEY}_${userEmail}`;
 
   const loadGameForUser = (userEmail: string) => {
@@ -65,20 +66,30 @@ const App: React.FC = () => {
     }
   };
 
-  // --- LÓGICA DE LOGIN LOCAL ---
   const handleLocalRegister = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!email || !password || !name) return setError("All fields are required");
+    if (!email || !password || !name) {
+      setError("All fields are required");
+      return;
+    }
 
     const accounts: LocalAccount[] = JSON.parse(localStorage.getItem('aether_accounts') || '[]');
-    if (accounts.find(a => a.email === email)) return setError("Email already registered");
+    if (accounts.find(a => a.email === email)) {
+      setError("Email already registered");
+      return;
+    }
 
     const newAccount = { email, password, name };
     accounts.push(newAccount);
     localStorage.setItem('aether_accounts', JSON.stringify(accounts));
 
-    const userData: GoogleUser = { email, name, picture: `https://api.dicebear.com/7.x/bottts/svg?seed=${email}`, type: 'local' };
+    const userData: GoogleUser = { 
+      email, 
+      name, 
+      picture: `https://api.dicebear.com/7.x/bottts/svg?seed=${email}`, 
+      type: 'local' 
+    };
     setUser(userData);
     localStorage.setItem('aether_user', JSON.stringify(userData));
     loadGameForUser(email);
@@ -91,7 +102,12 @@ const App: React.FC = () => {
     const account = accounts.find(a => a.email === email && a.password === password);
 
     if (account) {
-      const userData: GoogleUser = { email: account.email, name: account.name, picture: `https://api.dicebear.com/7.x/bottts/svg?seed=${account.email}`, type: 'local' };
+      const userData: GoogleUser = { 
+        email: account.email, 
+        name: account.name, 
+        picture: `https://api.dicebear.com/7.x/bottts/svg?seed=${account.email}`, 
+        type: 'local' 
+      };
       setUser(userData);
       localStorage.setItem('aether_user', JSON.stringify(userData));
       loadGameForUser(account.email);
@@ -100,12 +116,11 @@ const App: React.FC = () => {
     }
   };
 
-  // --- LÓGICA DE LOGIN GOOGLE ---
   const decodeJwt = (token: string) => {
     try {
       const base64Url = token.split('.')[1];
       const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+      const jsonPayload = decodeURIComponent(atob(base64).split('').map((c) => {
         return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
       }).join(''));
       return JSON.parse(jsonPayload);
@@ -136,8 +151,9 @@ const App: React.FC = () => {
     }
 
     const initGoogle = () => {
-      if ((window as any).google) {
-        (window as any).google.accounts.id.initialize({
+      const g = (window as any).google;
+      if (g && g.accounts) {
+        g.accounts.id.initialize({
           client_id: GOOGLE_CLIENT_ID,
           callback: handleCredentialResponse,
           auto_select: true
@@ -145,7 +161,7 @@ const App: React.FC = () => {
 
         const btnContainer = document.getElementById('google-btn-container');
         if (btnContainer) {
-          (window as any).google.accounts.id.renderButton(btnContainer, {
+          g.accounts.id.renderButton(btnContainer, {
             theme: 'filled_black',
             size: 'large',
             shape: 'pill',
@@ -163,10 +179,10 @@ const App: React.FC = () => {
   const handleLogout = () => {
     setUser(null);
     localStorage.removeItem('aether_user');
-    if ((window as any).google) (window as any).google.accounts.id.disableAutoSelect();
+    const g = (window as any).google;
+    if (g && g.accounts) g.accounts.id.disableAutoSelect();
   };
 
-  // --- SONS E GAMEPLAY CORE ---
   const getAudioContext = useCallback(() => {
     if (!audioContextRef.current) {
       audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -209,24 +225,24 @@ const App: React.FC = () => {
     osc.stop(now + 0.2);
   }, [getAudioContext]);
 
-  // Added explicit generic type <number> to reduce to ensure correct inference of the accumulator
-  const aps = UPGRADES
-    .filter(u => u.type === 'auto')
-    .reduce<number>((acc, u) => acc + (gameState.upgrades[u.id] || 0) * u.power, 0);
+  const aps = useMemo(() => {
+    return UPGRADES
+      .filter((u: Upgrade) => u.type === 'auto')
+      .reduce((acc: number, u: Upgrade) => acc + (gameState.upgrades[u.id] || 0) * u.power, 0);
+  }, [gameState.upgrades]);
 
-  // Added explicit generic type <number> to reduce to ensure correct inference of the accumulator
-  const apc = 1 + UPGRADES
-    .filter(u => u.type === 'click')
-    .reduce<number>((acc, u) => acc + (gameState.upgrades[u.id] || 0) * u.power, 0);
+  const apc = useMemo(() => {
+    return 1 + UPGRADES
+      .filter((u: Upgrade) => u.type === 'click')
+      .reduce((acc: number, u: Upgrade) => acc + (gameState.upgrades[u.id] || 0) * u.power, 0);
+  }, [gameState.upgrades]);
 
-  const totalUpgrades = useMemo(() => 
-    Object.values(gameState.upgrades).reduce((a, b) => a + b, 0),
-    [gameState.upgrades]
-  );
+  const totalUpgrades = useMemo(() => {
+    return Object.values(gameState.upgrades).reduce((a: number, b: number) => a + b, 0);
+  }, [gameState.upgrades]);
   
   const evolutionIntensity = Math.min(1, totalUpgrades / 300);
 
-  // Offline earnings on login
   useEffect(() => {
     if (!user) return;
     const lastSave = gameState.lastSave;
@@ -234,7 +250,7 @@ const App: React.FC = () => {
     const diffInSeconds = (now - lastSave) / 1000;
     if (diffInSeconds > 10 && aps > 0) {
       const earned = Math.floor(diffInSeconds * aps);
-      setGameState(prev => ({
+      setGameState((prev) => ({
         ...prev,
         aether: prev.aether + earned,
         totalAetherEarned: prev.totalAetherEarned + earned,
@@ -245,25 +261,22 @@ const App: React.FC = () => {
     }
   }, [user]);
 
-  // Game Loop
   useEffect(() => {
     if (!user) return;
     const interval = setInterval(() => {
-      // Added explicit GameState type to the functional update parameter 'prev' to fix the 'unknown' operator error
       setGameState((prev: GameState) => ({
         ...prev,
-        aether: prev.aether + aps / 10,
-        totalAetherEarned: prev.totalAetherEarned + aps / 10,
+        aether: prev.aether + (aps / 10),
+        totalAetherEarned: prev.totalAetherEarned + (aps / 10),
       }));
     }, 100);
     return () => clearInterval(interval);
   }, [aps, user]);
 
-  // Auto-save
   useEffect(() => {
     if (!user) return;
     const saveInterval = setInterval(() => {
-      setGameState(prev => {
+      setGameState((prev) => {
         const stateToSave = { ...prev, lastSave: Date.now() };
         localStorage.setItem(getUserSaveKey(user.email), JSON.stringify(stateToSave));
         return stateToSave;
@@ -276,7 +289,6 @@ const App: React.FC = () => {
 
   const handleManualClick = useCallback((e: React.MouseEvent) => {
     playClickSound();
-    // Added explicit typing to ensure robustness during manual clicks
     setGameState((prev: GameState) => {
       const newState = {
         ...prev,
@@ -285,16 +297,29 @@ const App: React.FC = () => {
         clickCount: prev.clickCount + 1,
         lastSave: Date.now()
       };
-      if (user) localStorage.setItem(getUserSaveKey(user.email), JSON.stringify(newState));
+      if (user) {
+        localStorage.setItem(getUserSaveKey(user.email), JSON.stringify(newState));
+      }
       return newState;
     });
+    
     const id = nextId.current++;
-    setFloatingNumbers(prev => [...prev, { id, x: e.clientX, y: e.clientY, val: apc, rotation: (Math.random() * 30) - 15, driftX: (Math.random() * 60) - 30 }]);
-    setTimeout(() => setFloatingNumbers(prev => prev.filter(f => f.id !== id)), 1200);
+    const newFloat = { 
+      id, 
+      x: e.clientX, 
+      y: e.clientY, 
+      val: apc, 
+      rotation: (Math.random() * 30) - 15, 
+      driftX: (Math.random() * 60) - 30 
+    };
+    setFloatingNumbers((prev) => [...prev, newFloat]);
+    setTimeout(() => {
+      setFloatingNumbers((prev) => prev.filter((f) => f.id !== id));
+    }, 1200);
   }, [apc, playClickSound, user]);
 
   const handlePurchase = useCallback((upgradeId: string) => {
-    const upgrade = UPGRADES.find(u => u.id === upgradeId);
+    const upgrade = UPGRADES.find((u) => u.id === upgradeId);
     if (!upgrade || !user) return;
     const currentLevel = gameState.upgrades[upgradeId] || 0;
     const actualCost = Math.floor(upgrade.baseCost * Math.pow(upgrade.costMultiplier, currentLevel));
@@ -313,7 +338,6 @@ const App: React.FC = () => {
     }
   }, [gameState.aether, gameState.upgrades, playUpgradeSound, user]);
 
-  // --- COMPONENTES DE UI DE LOGIN ---
   if (!user) {
     return (
       <div className="min-h-screen w-full flex items-center justify-center bg-[#030305] text-white relative overflow-hidden p-6">
@@ -324,50 +348,37 @@ const App: React.FC = () => {
           <div className="w-16 h-16 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-6">
             <span className="text-2xl">∿</span>
           </div>
-          
           <h1 className="text-3xl font-extralight tracking-tighter mb-1 text-gradient">Aether OS</h1>
           <p className="text-zinc-500 text-[10px] uppercase tracking-[0.4em] font-bold mb-8">Authorization Protocol</p>
-          
           <form className="w-full flex flex-col gap-4 mb-8" onSubmit={authMode === 'login' ? handleLocalLogin : handleLocalRegister}>
             {authMode === 'register' && (
               <input 
-                type="text" 
-                placeholder="Operational Name" 
+                type="text" placeholder="Operational Name" 
                 className="bg-white/5 border border-white/10 rounded-2xl px-5 py-3.5 text-sm focus:outline-none focus:border-blue-500/50 transition-all placeholder:text-zinc-600"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                value={name} onChange={(e) => setName(e.target.value)}
               />
             )}
             <input 
-              type="email" 
-              placeholder="Neural Identifier (Email)" 
+              type="email" placeholder="Neural Identifier (Email)" 
               className="bg-white/5 border border-white/10 rounded-2xl px-5 py-3.5 text-sm focus:outline-none focus:border-blue-500/50 transition-all placeholder:text-zinc-600"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              value={email} onChange={(e) => setEmail(e.target.value)}
             />
             <input 
-              type="password" 
-              placeholder="Security Key" 
+              type="password" placeholder="Security Key" 
               className="bg-white/5 border border-white/10 rounded-2xl px-5 py-3.5 text-sm focus:outline-none focus:border-blue-500/50 transition-all placeholder:text-zinc-600"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              value={password} onChange={(e) => setPassword(e.target.value)}
             />
-            
             {error && <p className="text-rose-500 text-[10px] font-bold uppercase tracking-widest text-center mt-2 animate-pulse">{error}</p>}
-
             <button type="submit" className="mt-2 bg-white text-black font-bold text-xs uppercase tracking-widest py-4 rounded-2xl hover:bg-zinc-200 active:scale-[0.98] transition-all">
               {authMode === 'login' ? 'Establish Connection' : 'Register Identifier'}
             </button>
           </form>
-
           <div className="w-full flex items-center gap-4 mb-8">
             <div className="h-px flex-1 bg-white/5" />
             <span className="text-[10px] uppercase tracking-widest text-zinc-600 font-bold">Or Neural Link</span>
             <div className="h-px flex-1 bg-white/5" />
           </div>
-
           <div id="google-btn-container" className="mb-8 overflow-hidden rounded-full"></div>
-          
           <div className="flex gap-4">
             <button 
               onClick={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setError(null); }} 
@@ -381,16 +392,90 @@ const App: React.FC = () => {
     );
   }
 
-  // --- TELA DO JOGO ---
   return (
     <div className="min-h-screen w-full flex flex-col md:flex-row bg-[#030305] text-zinc-100 selection:bg-blue-500/30 overflow-x-hidden">
-      {/* HUD Header */}
-      <div className="fixed top-4 right-4 z-[60] flex items-center gap-3 glass p-1.5 pl-4 rounded-full border-white/5 shadow-xl">
-        <div className="flex flex-col items-end">
-          <span className="text-[10px] text-zinc-400 font-bold tracking-tight">{user.name}</span>
-          <button onClick={handleLogout} className="text-[8px] uppercase tracking-widest text-blue-400 font-black hover:text-white transition-colors">Disconnect</button>
+      
+      {/* Sidebar Backdrop */}
+      {isSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] transition-opacity duration-500 animate-in fade-in"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      {/* Left Navigation Sidebar */}
+      <aside 
+        className={`fixed top-0 left-0 h-full w-[280px] sm:w-[320px] glass z-[80] shadow-2xl transition-transform duration-500 ease-out border-r border-white/5 flex flex-col
+          ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        `}
+      >
+        <div className="p-8 border-b border-white/5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+             <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
+                <span className="text-lg">∿</span>
+              </div>
+              <span className="text-lg font-extralight tracking-tighter text-white">Aether OS</span>
+          </div>
+          <button 
+            onClick={() => setIsSidebarOpen(false)}
+            className="text-zinc-500 hover:text-white transition-colors"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
         </div>
-        <img src={user.picture} alt="Avatar" className="w-8 h-8 rounded-full border border-white/10 bg-zinc-900" />
+
+        <nav className="flex-1 p-6 space-y-2 overflow-y-auto">
+          {[
+            { label: 'Neural Core', icon: '◈' },
+            { label: 'Synchronizations', icon: 'Ξ' },
+            { label: 'Achievements', icon: '★' },
+            { label: 'Neural Settings', icon: '⚙' },
+            { label: 'Network Log', icon: '▤' }
+          ].map((item, idx) => (
+            <button 
+              key={idx}
+              className="w-full flex items-center gap-4 px-4 py-3 rounded-xl hover:bg-white/5 transition-all text-left group"
+            >
+              <span className="text-zinc-600 group-hover:text-blue-400 text-lg transition-colors">{item.icon}</span>
+              <span className="text-sm font-light tracking-wide text-zinc-400 group-hover:text-white transition-colors">{item.label}</span>
+            </button>
+          ))}
+        </nav>
+
+        <div className="p-8 border-t border-white/5 space-y-6">
+          <div className="flex items-center gap-3">
+            <img src={user.picture} alt="Avatar" className="w-10 h-10 rounded-full border border-white/10" />
+            <div className="flex flex-col">
+              <span className="text-xs text-white font-medium tracking-tight">{user.name}</span>
+              <span className="text-[10px] text-zinc-500 truncate max-w-[160px]">{user.email}</span>
+            </div>
+          </div>
+          <button 
+            onClick={handleLogout}
+            className="w-full py-3 rounded-xl border border-white/5 hover:border-red-500/30 hover:bg-red-500/5 text-zinc-500 hover:text-red-400 text-[10px] uppercase tracking-widest font-bold transition-all"
+          >
+            Terminate Session
+          </button>
+        </div>
+      </aside>
+
+      {/* Hamburger Menu Icon (Top Left) */}
+      <button 
+        onClick={() => setIsSidebarOpen(true)}
+        className="fixed top-6 left-6 z-[60] w-12 h-12 glass rounded-2xl flex flex-col items-center justify-center gap-1.5 hover:bg-white/10 active:scale-95 transition-all group"
+        aria-label="Open Menu"
+      >
+        <span className="w-5 h-0.5 bg-zinc-400 group-hover:bg-white transition-colors rounded-full" />
+        <span className="w-3 h-0.5 bg-zinc-400 group-hover:bg-blue-400 transition-colors rounded-full self-start ml-3.5" />
+        <span className="w-5 h-0.5 bg-zinc-400 group-hover:bg-white transition-colors rounded-full" />
+      </button>
+
+      {/* HUD Header (Profile - Keep simplified) */}
+      <div className="fixed top-6 right-6 z-[60] flex items-center glass p-1 rounded-full border-white/5 shadow-xl group cursor-pointer" onClick={() => setIsSidebarOpen(true)}>
+        <img src={user.picture} alt="Avatar" className="w-10 h-10 rounded-full border border-white/10 bg-zinc-900 group-hover:border-blue-500/50 transition-colors" />
       </div>
 
       <div className="fixed inset-0 pointer-events-none z-0">
@@ -399,7 +484,7 @@ const App: React.FC = () => {
       </div>
 
       <div className="fixed inset-0 pointer-events-none z-[100]">
-        {floatingNumbers.map(f => (
+        {floatingNumbers.map((f) => (
           <div key={f.id} className="floating-number text-2xl tracking-tighter" style={{ left: f.x, top: f.y, '--rotation': f.rotation.toFixed(2), '--drift-x': f.driftX.toFixed(2) } as any}>
             <span><span className="opacity-60 text-sm mr-0.5 font-light">+</span>{formatNumber(f.val)}</span>
           </div>
@@ -434,13 +519,11 @@ const App: React.FC = () => {
             </div>
             <p className="text-[11px] text-zinc-500 font-bold tracking-widest uppercase opacity-70">Expand your extraction capabilities</p>
         </div>
-
         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
-            {UPGRADES.map(upgrade => (
+            {UPGRADES.map((upgrade) => (
                 <UpgradeCard key={upgrade.id} upgrade={upgrade} level={gameState.upgrades[upgrade.id] || 0} currentAether={gameState.aether} onPurchase={handlePurchase} />
             ))}
         </div>
-
         <div className="p-6 md:p-10 border-t border-white/[0.03] bg-black/60 backdrop-blur-3xl">
             <div className="mb-6 group">
                 <div className="flex justify-between text-[10px] uppercase tracking-[0.3em] text-zinc-600 mb-4 font-black">
