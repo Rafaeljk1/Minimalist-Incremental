@@ -3,33 +3,46 @@ import React from 'react';
 
 interface StatsProps {
   aether: number;
-  aps: number; // Aether Per Second
-  apc: number; // Aether Per Click
+  aps: number;
+  apc: number;
 }
 
-const Stats: React.FC<StatsProps> = ({ aether, aps, apc }) => {
-  const formatFull = (num: number) => {
-    return Math.floor(num).toLocaleString('en-US');
-  };
+export const formatNumber = (num: number): string => {
+  if (num < 1000) return Math.floor(num).toString();
+  const suffixes = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc'];
+  const suffixNum = Math.floor(("" + Math.floor(num)).length / 3);
+  let shortValue: string | number = parseFloat((suffixNum !== 0 ? (num / Math.pow(1000, suffixNum)) : num).toPrecision(3));
+  if (shortValue % 1 !== 0) {
+    shortValue = shortValue.toFixed(2);
+  }
+  return shortValue + suffixes[suffixNum];
+};
 
+const Stats: React.FC<StatsProps> = ({ aether, aps, apc }) => {
   return (
-    <div className="flex flex-col items-center gap-2 mb-12">
+    <div className="flex flex-col items-center gap-2 mb-16 select-none animate-in fade-in duration-1000">
       <div className="flex flex-col items-center">
-        <span className="text-xs uppercase tracking-[0.3em] text-zinc-500 font-medium mb-1">Total Energy</span>
-        <h1 className="text-5xl sm:text-6xl font-light tracking-tight text-white text-gradient">
-          {formatFull(aether)}
+        <span className="text-[10px] uppercase tracking-[0.4em] text-zinc-500 font-bold mb-3 opacity-60">
+          Neural Energy Reserve
+        </span>
+        <h1 className="text-6xl sm:text-8xl font-extralight tracking-tighter text-white text-gradient">
+          {formatNumber(aether)}
         </h1>
       </div>
       
-      <div className="flex gap-8 mt-4">
-        <div className="flex flex-col items-center">
-          <span className="text-[10px] uppercase tracking-widest text-zinc-500">Generation</span>
-          <span className="text-sm text-zinc-300 font-medium">+{aps.toFixed(1)} /s</span>
+      <div className="flex gap-16 mt-8">
+        <div className="flex flex-col items-center group">
+          <span className="text-[9px] uppercase tracking-[0.2em] text-zinc-600 mb-1 font-bold group-hover:text-blue-400/50 transition-colors">Flow Rate</span>
+          <span className="text-lg text-blue-400 font-light font-mono">
+            +{formatNumber(aps)}<span className="text-[10px] ml-1 opacity-40">/S</span>
+          </span>
         </div>
-        <div className="w-px h-8 bg-white/10" />
-        <div className="flex flex-col items-center">
-          <span className="text-[10px] uppercase tracking-widest text-zinc-500">Resonance</span>
-          <span className="text-sm text-zinc-300 font-medium">+{apc} /click</span>
+        <div className="w-px h-12 bg-white/5 self-center rotate-12" />
+        <div className="flex flex-col items-center group">
+          <span className="text-[9px] uppercase tracking-[0.2em] text-zinc-600 mb-1 font-bold group-hover:text-zinc-400 transition-colors">Resonance</span>
+          <span className="text-lg text-zinc-300 font-light font-mono">
+            +{formatNumber(apc)}<span className="text-[10px] ml-1 opacity-40">/C</span>
+          </span>
         </div>
       </div>
     </div>

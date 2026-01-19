@@ -4,8 +4,8 @@ import { Upgrade } from './types.ts';
 export const UPGRADES: Upgrade[] = [
   {
     id: 'resonance',
-    name: 'Resonance',
-    description: 'Enhances your neural connection to the Aether.',
+    name: 'Neural Resonance',
+    description: 'Increases the output of every manual interaction.',
     baseCost: 15,
     costMultiplier: 1.15,
     type: 'click',
@@ -14,7 +14,7 @@ export const UPGRADES: Upgrade[] = [
   {
     id: 'collector',
     name: 'Flux Collector',
-    description: 'A basic automated system for harvesting idle Aether.',
+    description: 'Automated drones that harvest ambient energy fluctuations.',
     baseCost: 100,
     costMultiplier: 1.15,
     type: 'auto',
@@ -23,7 +23,7 @@ export const UPGRADES: Upgrade[] = [
   {
     id: 'harvester',
     name: 'Quantum Harvester',
-    description: 'More efficient, extracting flux from nearby dimensions.',
+    description: 'Extracts energy from sub-atomic quantum vibrations.',
     baseCost: 1100,
     costMultiplier: 1.15,
     type: 'auto',
@@ -32,7 +32,7 @@ export const UPGRADES: Upgrade[] = [
   {
     id: 'refinery',
     name: 'Spectral Refinery',
-    description: 'Refines raw Aether into high-purity energy.',
+    description: 'Processes raw entropy into pure, usable Aether.',
     baseCost: 12000,
     costMultiplier: 1.15,
     type: 'auto',
@@ -41,7 +41,7 @@ export const UPGRADES: Upgrade[] = [
   {
     id: 'conduit',
     name: 'Primal Conduit',
-    description: 'A direct link to the core of the Aether stream.',
+    description: 'A direct uplink to the core of the universal stream.',
     baseCost: 130000,
     costMultiplier: 1.15,
     type: 'auto',
@@ -50,11 +50,38 @@ export const UPGRADES: Upgrade[] = [
   {
     id: 'forge',
     name: 'Singularity Forge',
-    description: 'Collapses reality to generate massive energy output.',
+    description: 'Uses micro-black holes to generate massive power output.',
     baseCost: 1400000,
     costMultiplier: 1.15,
     type: 'auto',
     power: 1400,
+  },
+  {
+    id: 'void_engine',
+    name: 'Void Engine',
+    description: 'Harnesses the energy of non-existence to power the matrix.',
+    baseCost: 20000000,
+    costMultiplier: 1.14,
+    type: 'auto',
+    power: 7800,
+  },
+  {
+    id: 'aether_array',
+    name: 'Aether Array',
+    description: 'Massive structures that span across galactic clusters.',
+    baseCost: 330000000,
+    costMultiplier: 1.13,
+    type: 'auto',
+    power: 44000,
+  },
+  {
+    id: 'chronos_core',
+    name: 'Chronos Core',
+    description: 'Manipulates time to generate energy from future states.',
+    baseCost: 5100000000,
+    costMultiplier: 1.12,
+    type: 'auto',
+    power: 260000,
   }
 ];
 
@@ -69,6 +96,9 @@ export const INITIAL_STATE = {
     refinery: 0,
     conduit: 0,
     forge: 0,
+    void_engine: 0,
+    aether_array: 0,
+    chronos_core: 0,
   },
   lastSave: Date.now(),
 };
