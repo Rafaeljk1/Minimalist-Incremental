@@ -45,6 +45,39 @@ const Background = React.memo(() => (
   </div>
 ));
 
+// Minimalist Snow Component
+const SnowOverlay = React.memo(() => {
+  const snowflakes = useMemo(() => {
+    return Array.from({ length: 50 }).map((_, i) => ({
+      id: i,
+      left: Math.random() * 100,
+      delay: Math.random() * 5,
+      duration: 5 + Math.random() * 10,
+      size: 2 + Math.random() * 4,
+      opacity: 0.1 + Math.random() * 0.4
+    }));
+  }, []);
+
+  return (
+    <div className="fixed inset-0 pointer-events-none z-[5] overflow-hidden">
+      {snowflakes.map((s) => (
+        <div
+          key={s.id}
+          className="absolute top-[-10px] bg-white rounded-full animate-snow"
+          style={{
+            left: `${s.left}%`,
+            width: `${s.size}px`,
+            height: `${s.size}px`,
+            opacity: s.opacity,
+            animationDuration: `${s.duration}s`,
+            animationDelay: `${s.delay}s`,
+          } as any}
+        />
+      ))}
+    </div>
+  );
+});
+
 const App: React.FC = () => {
   // Auth States
   const [user, setUser] = useState<GoogleUser | null>(null);
@@ -59,6 +92,8 @@ const App: React.FC = () => {
   const [activeSection, setActiveSection] = useState<'core' | 'sync' | 'achievements' | 'settings' | 'log'>('core');
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [clickTrigger, setClickTrigger] = useState(0);
+  const [isSnowing, setIsSnowing] = useState(false);
+  const [isAdminMode, setIsAdminMode] = useState(false);
 
   // Game States
   const [gameState, setGameState] = useState<GameState>(INITIAL_STATE);
@@ -66,8 +101,27 @@ const App: React.FC = () => {
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [floatingNumbers, setFloatingNumbers] = useState<FloatingNumber[]>([]);
   
+  // Admin only state
+  const [adminApcBoost, setAdminApcBoost] = useState(1);
+
   const nextId = useRef(0);
   const audioContextRef = useRef<AudioContext | null>(null);
+
+  // Hidden /ADM route detection
+  useEffect(() => {
+    const handleRouteChange = () => {
+      const path = window.location.pathname.toUpperCase();
+      if (path === '/ADM' || window.location.hash.toUpperCase() === '#/ADM') {
+        setIsAdminMode(true);
+      } else {
+        setIsAdminMode(false);
+      }
+    };
+
+    handleRouteChange();
+    window.addEventListener('popstate', handleRouteChange);
+    return () => window.removeEventListener('popstate', handleRouteChange);
+  }, []);
 
   const addLog = (message: string, type: LogEntry['type'] = 'info') => {
     const newLog: LogEntry = {
@@ -263,10 +317,10 @@ const App: React.FC = () => {
   }, [gameState.upgrades]);
 
   const apc = useMemo(() => {
-    return 1 + UPGRADES
+    return (1 + UPGRADES
       .filter((u: Upgrade) => u.type === 'click')
-      .reduce((acc: number, u: Upgrade) => acc + (gameState.upgrades[u.id] || 0) * u.power, 0);
-  }, [gameState.upgrades]);
+      .reduce((acc: number, u: Upgrade) => acc + (gameState.upgrades[u.id] || 0) * u.power, 0)) * adminApcBoost;
+  }, [gameState.upgrades, adminApcBoost]);
 
   const totalUpgrades = useMemo(() => {
     return Object.values(gameState.upgrades).reduce((a: number, b: number) => a + b, 0);
@@ -392,6 +446,28 @@ const App: React.FC = () => {
     }
   };
 
+  // ADMIN ACTIONS
+  const adminAddAether = (amount: number) => {
+    setGameState(prev => ({
+        ...prev,
+        aether: prev.aether + amount,
+        totalAetherEarned: prev.totalAetherEarned + amount
+    }));
+    addLog(`ADMIN: Infused ${formatNumber(amount)} Aether.`, 'success');
+  };
+
+  const adminMaxUpgrades = () => {
+    const maxedUpgrades: {[key: string]: number} = {};
+    UPGRADES.forEach(u => maxedUpgrades[u.id] = 999);
+    setGameState(prev => ({
+        ...prev,
+        upgrades: maxedUpgrades
+    }));
+    addLog(`ADMIN: All optimizations linked at maximum level.`, 'success');
+  };
+
+  const adminToggleSnow = () => setIsSnowing(!isSnowing);
+
   const achievements = [
     { id: '1k', label: 'Fragmented Origin', desc: 'Earned 1,000 Total Aether', condition: () => gameState.totalAetherEarned >= 1000 },
     { id: '1m', label: 'Core Maturity', desc: 'Earned 1,000,000 Total Aether', condition: () => gameState.totalAetherEarned >= 1000000 },
@@ -450,6 +526,88 @@ const App: React.FC = () => {
           </div>
         </div>
       </div>
+    );
+  }
+
+  // --- HIDDEN ADMIN PANEL VIEW ---
+  if (isAdminMode) {
+    return (
+        <div className="min-h-screen w-full bg-black text-emerald-500 p-8 font-mono relative overflow-y-auto">
+            <Background />
+            <div className="relative z-10 max-w-4xl mx-auto">
+                <header className="border-b border-emerald-500/30 pb-6 mb-8 flex items-center justify-between">
+                    <div>
+                        <h1 className="text-2xl font-bold tracking-tighter text-white uppercase">Neural Matrix Admin</h1>
+                        <p className="text-[10px] uppercase tracking-[0.2em] text-emerald-600 font-bold mt-1">Authorized Laboratory Access // System Overrides Enabled</p>
+                    </div>
+                    <button onClick={() => window.history.back()} className="text-[10px] border border-emerald-500/30 px-4 py-2 hover:bg-emerald-500 hover:text-black transition-all">TERMINATE_ADMIN_SESSION</button>
+                </header>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {/* Resource Control */}
+                    <div className="glass p-6 rounded-3xl border-emerald-500/20 bg-emerald-500/5">
+                        <h3 className="text-white text-xs uppercase font-bold tracking-widest mb-6">Resource Injection</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                            <button onClick={() => adminAddAether(1000000)} className="bg-emerald-500/10 border border-emerald-500/30 py-3 rounded-xl hover:bg-emerald-500 hover:text-black text-[10px] font-bold">+1M AETHER</button>
+                            <button onClick={() => adminAddAether(1000000000)} className="bg-emerald-500/10 border border-emerald-500/30 py-3 rounded-xl hover:bg-emerald-500 hover:text-black text-[10px] font-bold">+1B AETHER</button>
+                            <button onClick={() => adminAddAether(1e15)} className="col-span-2 bg-white text-black py-4 rounded-xl hover:bg-emerald-400 font-bold text-xs">INFUSE QUINTILLION AETHER</button>
+                        </div>
+                    </div>
+
+                    {/* Matrix Control */}
+                    <div className="glass p-6 rounded-3xl border-emerald-500/20 bg-emerald-500/5">
+                        <h3 className="text-white text-xs uppercase font-bold tracking-widest mb-6">Optimization Overrides</h3>
+                        <button onClick={adminMaxUpgrades} className="w-full bg-blue-500 text-black py-4 rounded-xl hover:bg-blue-400 font-bold text-xs mb-4 uppercase tracking-tighter">MAX OUT ALL OPTIMIZATIONS (LV. 999)</button>
+                        <button onClick={handleResetGame} className="w-full border border-rose-500/40 text-rose-500 py-4 rounded-xl hover:bg-rose-500 hover:text-black font-bold text-xs uppercase transition-all">HARD RESET NEURAL PROFILE</button>
+                    </div>
+
+                    {/* Interaction Control */}
+                    <div className="glass p-6 rounded-3xl border-emerald-500/20 bg-emerald-500/5">
+                        <h3 className="text-white text-xs uppercase font-bold tracking-widest mb-6">Neural Interaction Settings</h3>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-[10px] text-emerald-600 block mb-2 font-bold">CLICK_POWER_MULTIPLIER (GOD_MODE)</label>
+                                <input 
+                                    type="range" min="1" max="1000" step="1" 
+                                    value={adminApcBoost} 
+                                    onChange={(e) => setAdminApcBoost(Number(e.target.value))}
+                                    className="w-full accent-emerald-500 bg-emerald-900/50 h-1.5 rounded-full"
+                                />
+                                <div className="flex justify-between text-[10px] mt-1 font-bold">
+                                    <span>x1</span>
+                                    <span className="text-white">CURRENT: x{adminApcBoost}</span>
+                                    <span>x1000</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Environment Control */}
+                    <div className="glass p-6 rounded-3xl border-emerald-500/20 bg-emerald-500/5">
+                        <h3 className="text-white text-xs uppercase font-bold tracking-widest mb-6">Ambient Manipulation</h3>
+                        <div className="flex gap-4">
+                            <button onClick={adminToggleSnow} className={`flex-1 py-4 rounded-xl font-bold text-xs uppercase border transition-all ${isSnowing ? 'bg-white text-black border-white' : 'border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10'}`}>
+                                {isSnowing ? 'DISABLE_SNOW_OVERLAY' : 'ENABLE_SNOW_OVERLAY'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="mt-12 glass p-6 rounded-3xl border-emerald-500/20">
+                   <h3 className="text-white text-xs uppercase font-bold tracking-widest mb-4">Live Matrix Stream</h3>
+                   <div className="h-48 overflow-y-auto bg-black/40 p-4 rounded-xl font-mono text-[10px] space-y-1 text-emerald-700">
+                        <p>> NEURAL_RESERVE: {formatNumber(gameState.aether)}</p>
+                        <p>> TOTAL_EARNED: {formatNumber(gameState.totalAetherEarned)}</p>
+                        <p>> CLICK_COUNT: {gameState.clickCount}</p>
+                        <p>> APS: {formatNumber(aps)}</p>
+                        <p>> APC: {formatNumber(apc)}</p>
+                        <p>> ACTIVE_OPT: {totalUpgrades}</p>
+                        <p>> SESSION_KEY: {user.email}</p>
+                        <p className="animate-pulse text-emerald-400">> LISTENING_FOR_MATRIX_FLUCTUATIONS...</p>
+                   </div>
+                </div>
+            </div>
+        </div>
     );
   }
 
@@ -653,6 +811,20 @@ const App: React.FC = () => {
               <span className={`text-sm font-light tracking-wide transition-colors ${activeSection === item.id ? 'text-white' : 'text-zinc-400 group-hover:text-white'}`}>{item.label}</span>
             </button>
           ))}
+
+          <div className="pt-4 mt-4 border-t border-white/5">
+            <button 
+              onClick={() => setIsSnowing(!isSnowing)}
+              className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all text-left group border border-transparent
+                ${isSnowing ? 'bg-white/10 border-white/20' : 'hover:bg-white/5'}
+              `}
+            >
+              <span className={`text-lg transition-colors ${isSnowing ? 'text-blue-200' : 'text-zinc-600 group-hover:text-white'}`}>❃</span>
+              <span className={`text-sm font-light tracking-wide transition-colors ${isSnowing ? 'text-white' : 'text-zinc-400 group-hover:text-white'}`}>
+                {isSnowing ? 'Stop Snow' : 'Let it snow'}
+              </span>
+            </button>
+          </div>
         </nav>
 
         <div className="p-8 border-t border-white/5 space-y-6">
@@ -689,6 +861,7 @@ const App: React.FC = () => {
       </div>
 
       <Background />
+      {isSnowing && <SnowOverlay />}
 
       <div className="fixed inset-0 pointer-events-none z-[100]">
         {floatingNumbers.map((f) => (
