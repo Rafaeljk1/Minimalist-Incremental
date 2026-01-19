@@ -75,15 +75,16 @@ const App: React.FC = () => {
       clickCount: prev.clickCount + 1,
     }));
 
-    // Premium Particle Effect
+    // Particle Effect Logic
     const id = nextId.current++;
-    const x = e.clientX + (Math.random() * 20 - 10);
-    const y = e.clientY + (Math.random() * 20 - 10);
+    // Use client coordinates for accurate floating positioning
+    const x = e.clientX;
+    const y = e.clientY;
     
     setFloatingNumbers(prev => [...prev, { id, x, y, val: apc }]);
     setTimeout(() => {
       setFloatingNumbers(prev => prev.filter(f => f.id !== id));
-    }, 1200);
+    }, 1100);
 
     // Save state on significant action
     localStorage.setItem(SAVE_KEY, JSON.stringify({ ...gameState, lastSave: Date.now() }));
@@ -122,6 +123,23 @@ const App: React.FC = () => {
           <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.15] mix-blend-overlay" />
       </div>
 
+      {/* Floating Particle Container - Global & High Z-Index */}
+      <div className="fixed inset-0 pointer-events-none z-[100]">
+        {floatingNumbers.map(f => (
+          <div
+            key={f.id}
+            className="floating-number text-2xl tracking-tighter"
+            style={{ 
+              left: f.x, 
+              top: f.y,
+              transform: 'translate(-50%, -50%)' // Center on click
+            }}
+          >
+            <span className="opacity-60 text-sm mr-0.5 font-light">+</span>{formatNumber(f.val)}
+          </div>
+        ))}
+      </div>
+
       {/* Notification Toast */}
       {offlineMessage && (
         <div className="fixed top-8 left-1/2 -translate-x-1/2 z-50 glass px-6 py-3 rounded-full border border-blue-500/20 shadow-2xl animate-in slide-in-from-top-full duration-700 w-[90%] md:w-auto text-center">
@@ -149,19 +167,6 @@ const App: React.FC = () => {
                 ))}
             </div>
         </div>
-
-        {/* Floating Particle Container */}
-        <div className="fixed inset-0 pointer-events-none">
-          {floatingNumbers.map(f => (
-            <div
-              key={f.id}
-              className="floating-number text-2xl font-light tracking-tighter"
-              style={{ left: f.x - 20, top: f.y - 40 }}
-            >
-              <span className="opacity-40 text-sm mr-0.5">+</span>{formatNumber(f.val)}
-            </div>
-          ))}
-        </div>
       </main>
 
       {/* Sidebar: Optimization Interface */}
@@ -177,7 +182,6 @@ const App: React.FC = () => {
             <p className="text-[11px] text-zinc-500 font-bold tracking-widest uppercase opacity-70">Enhance the energy extraction matrix</p>
         </div>
 
-        {/* Scrollable Container with Visual Cue */}
         <div className="flex-1 relative min-h-0 flex flex-col">
             <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 scroll-smooth touch-pan-y" style={{ touchAction: 'pan-y' }}>
             {UPGRADES.map(upgrade => (
@@ -191,11 +195,9 @@ const App: React.FC = () => {
             ))}
             </div>
             
-            {/* Subtle Scroll Fade Cue */}
             <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-black/40 to-transparent pointer-events-none z-10 opacity-60 md:opacity-40" />
         </div>
 
-        {/* System Summary Footer */}
         <div className="p-6 md:p-10 border-t border-white/[0.03] bg-black/60 backdrop-blur-3xl">
             <div className="mb-6 md:mb-8 group">
                 <div className="flex justify-between text-[10px] uppercase tracking-[0.3em] text-zinc-600 mb-4 font-black group-hover:text-zinc-400 transition-colors">
