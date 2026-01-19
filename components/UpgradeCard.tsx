@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Upgrade } from '../types';
+import { Upgrade } from '../types.ts';
 
 interface UpgradeCardProps {
   upgrade: Upgrade;

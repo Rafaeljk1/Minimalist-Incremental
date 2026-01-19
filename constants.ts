@@ -1,5 +1,5 @@
 
-import { Upgrade } from './types';
+import { Upgrade } from './types.ts';
 
 export const UPGRADES: Upgrade[] = [
   {

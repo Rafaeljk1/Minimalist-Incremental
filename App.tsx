@@ -1,20 +1,20 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { GameState } from './types';
-import { UPGRADES, INITIAL_STATE, SAVE_KEY } from './constants';
-import Stats from './components/Stats';
-import Orb from './components/Orb';
-import UpgradeCard from './components/UpgradeCard';
+import { GameState } from './types.ts';
+import { UPGRADES, INITIAL_STATE, SAVE_KEY } from './constants.ts';
+import Stats from './components/Stats.tsx';
+import Orb from './components/Orb.tsx';
+import UpgradeCard from './components/UpgradeCard.tsx';
 
 const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>(() => {
-    const saved = localStorage.getItem(SAVE_KEY);
-    if (saved) {
-      try {
+    try {
+      const saved = localStorage.getItem(SAVE_KEY);
+      if (saved) {
         return JSON.parse(saved);
-      } catch (e) {
-        return INITIAL_STATE;
       }
+    } catch (e) {
+      console.error("Failed to load save state:", e);
     }
     return INITIAL_STATE;
   });
