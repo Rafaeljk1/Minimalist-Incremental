@@ -114,7 +114,7 @@ const App: React.FC = () => {
   }, [gameState.aether, gameState.upgrades]);
 
   return (
-    <div className="min-h-screen w-full flex flex-col md:flex-row bg-[#030305] text-zinc-100 selection:bg-blue-500/30 overflow-hidden">
+    <div className="min-h-screen w-full flex flex-col md:flex-row bg-[#030305] text-zinc-100 selection:bg-blue-500/30 overflow-x-hidden">
       {/* Background Ambience */}
       <div className="fixed inset-0 pointer-events-none z-0">
           <div className="absolute top-[-10%] left-[-5%] w-[800px] h-[800px] bg-blue-600/[0.03] rounded-full blur-[160px] animate-pulse" />
@@ -124,7 +124,7 @@ const App: React.FC = () => {
 
       {/* Notification Toast */}
       {offlineMessage && (
-        <div className="fixed top-8 left-1/2 -translate-x-1/2 z-50 glass px-6 py-3 rounded-full border border-blue-500/20 shadow-2xl animate-in slide-in-from-top-full duration-700">
+        <div className="fixed top-8 left-1/2 -translate-x-1/2 z-50 glass px-6 py-3 rounded-full border border-blue-500/20 shadow-2xl animate-in slide-in-from-top-full duration-700 w-[90%] md:w-auto text-center">
           <p className="text-[11px] uppercase tracking-[0.2em] font-bold text-blue-400">
             {offlineMessage}
           </p>
@@ -132,12 +132,12 @@ const App: React.FC = () => {
       )}
 
       {/* Main Interaction Hub */}
-      <main className="flex-1 flex flex-col items-center justify-center p-6 relative z-10 min-h-[50vh] md:min-h-screen">
+      <main className="flex-1 flex flex-col items-center justify-center p-6 relative z-10 min-h-[60vh] md:min-h-screen">
         <Stats aether={gameState.aether} aps={aps} apc={apc} />
         
         <Orb onClick={handleManualClick} />
 
-        <div className="mt-20 flex flex-col items-center gap-3 opacity-30 group cursor-help">
+        <div className="mt-12 md:mt-20 flex flex-col items-center gap-3 opacity-30 group cursor-help">
             <span className="text-[10px] uppercase tracking-[0.5em] font-bold transition-all group-hover:tracking-[0.6em]">Aether Stream Sync</span>
             <div className="flex gap-2">
                 {[...Array(5)].map((_, i) => (
@@ -166,9 +166,9 @@ const App: React.FC = () => {
 
       {/* Sidebar: Optimization Interface */}
       <aside className="w-full md:w-[460px] glass md:border-l border-white/[0.05] flex flex-col h-[60vh] md:h-screen relative z-20 shadow-[-20px_0_50px_rgba(0,0,0,0.5)]">
-        <div className="p-10 border-b border-white/[0.03] bg-white/[0.01]">
+        <div className="p-6 md:p-10 border-b border-white/[0.03] bg-white/[0.01]">
             <div className="flex items-center justify-between mb-2">
-                <h2 className="text-2xl font-extralight tracking-tight text-white/90">Optimization</h2>
+                <h2 className="text-xl md:text-2xl font-extralight tracking-tight text-white/90">Optimization</h2>
                 <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-blue-500/5 border border-blue-500/10">
                     <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse shadow-[0_0_8px_rgba(96,165,250,0.6)]" />
                     <span className="text-[10px] uppercase tracking-[0.2em] text-blue-400 font-black">Link Active</span>
@@ -177,21 +177,27 @@ const App: React.FC = () => {
             <p className="text-[11px] text-zinc-500 font-bold tracking-widest uppercase opacity-70">Enhance the energy extraction matrix</p>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-4 scroll-smooth">
-          {UPGRADES.map(upgrade => (
-            <UpgradeCard
-              key={upgrade.id}
-              upgrade={upgrade}
-              level={gameState.upgrades[upgrade.id] || 0}
-              currentAether={gameState.aether}
-              onPurchase={handlePurchase}
-            />
-          ))}
+        {/* Scrollable Container with Visual Cue */}
+        <div className="flex-1 relative min-h-0 flex flex-col">
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 scroll-smooth touch-pan-y" style={{ touchAction: 'pan-y' }}>
+            {UPGRADES.map(upgrade => (
+                <UpgradeCard
+                key={upgrade.id}
+                upgrade={upgrade}
+                level={gameState.upgrades[upgrade.id] || 0}
+                currentAether={gameState.aether}
+                onPurchase={handlePurchase}
+                />
+            ))}
+            </div>
+            
+            {/* Subtle Scroll Fade Cue */}
+            <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-black/40 to-transparent pointer-events-none z-10 opacity-60 md:opacity-40" />
         </div>
 
         {/* System Summary Footer */}
-        <div className="p-10 border-t border-white/[0.03] bg-black/60 backdrop-blur-3xl">
-            <div className="mb-8 group">
+        <div className="p-6 md:p-10 border-t border-white/[0.03] bg-black/60 backdrop-blur-3xl">
+            <div className="mb-6 md:mb-8 group">
                 <div className="flex justify-between text-[10px] uppercase tracking-[0.3em] text-zinc-600 mb-4 font-black group-hover:text-zinc-400 transition-colors">
                     <span>System Maturity Index</span>
                     <span className="text-zinc-400">{Math.min(100, (gameState.totalAetherEarned / 10000000) * 100).toFixed(2)}%</span>
