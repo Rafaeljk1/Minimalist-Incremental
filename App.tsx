@@ -94,6 +94,7 @@ const App: React.FC = () => {
   const [clickTrigger, setClickTrigger] = useState(0);
   const [isSnowing, setIsSnowing] = useState(false);
   const [isAdminMode, setIsAdminMode] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
 
   // Game States
   const [gameState, setGameState] = useState<GameState>(INITIAL_STATE);
@@ -278,6 +279,7 @@ const App: React.FC = () => {
   }, []);
 
   const playClickSound = useCallback(() => {
+    if (isMuted) return;
     const ctx = getAudioContext();
     const now = ctx.currentTime;
     const osc = ctx.createOscillator();
@@ -292,9 +294,10 @@ const App: React.FC = () => {
     gain.connect(ctx.destination);
     osc.start(now);
     osc.stop(now + 0.1);
-  }, [getAudioContext]);
+  }, [getAudioContext, isMuted]);
 
   const playUpgradeSound = useCallback(() => {
+    if (isMuted) return;
     const ctx = getAudioContext();
     const now = ctx.currentTime;
     const osc = ctx.createOscillator();
@@ -308,7 +311,24 @@ const App: React.FC = () => {
     gain.connect(ctx.destination);
     osc.start(now);
     osc.stop(now + 0.2);
-  }, [getAudioContext]);
+  }, [getAudioContext, isMuted]);
+
+  const playSaveSound = useCallback(() => {
+    if (isMuted) return;
+    const ctx = getAudioContext();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(220, now);
+    osc.frequency.exponentialRampToValueAtTime(110, now + 0.15);
+    gain.gain.setValueAtTime(0.04, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.2);
+  }, [getAudioContext, isMuted]);
 
   const aps = useMemo(() => {
     return UPGRADES
@@ -369,10 +389,11 @@ const App: React.FC = () => {
         return stateToSave;
       });
       setShowSaveToast(true);
+      playSaveSound();
       setTimeout(() => setShowSaveToast(false), 3000);
     }, 30000);
     return () => clearInterval(saveInterval);
-  }, [user]);
+  }, [user, playSaveSound]);
 
   const handleManualClick = useCallback((e: React.MouseEvent) => {
     playClickSound();
@@ -441,6 +462,7 @@ const App: React.FC = () => {
     if (user) {
       localStorage.setItem(getUserSaveKey(user.email), JSON.stringify({ ...gameState, lastSave: Date.now() }));
       setShowSaveToast(true);
+      playSaveSound();
       setTimeout(() => setShowSaveToast(false), 3000);
       addLog("Manual stream synchronization completed.", "info");
     }
@@ -812,7 +834,7 @@ const App: React.FC = () => {
             </button>
           ))}
 
-          <div className="pt-4 mt-4 border-t border-white/5">
+          <div className="pt-4 mt-4 border-t border-white/5 flex flex-col gap-2">
             <button 
               onClick={() => setIsSnowing(!isSnowing)}
               className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all text-left group border border-transparent
@@ -822,6 +844,20 @@ const App: React.FC = () => {
               <span className={`text-lg transition-colors ${isSnowing ? 'text-blue-200' : 'text-zinc-600 group-hover:text-white'}`}>❃</span>
               <span className={`text-sm font-light tracking-wide transition-colors ${isSnowing ? 'text-white' : 'text-zinc-400 group-hover:text-white'}`}>
                 {isSnowing ? 'Stop Snow' : 'Let it snow'}
+              </span>
+            </button>
+
+            <button 
+              onClick={() => setIsMuted(!isMuted)}
+              className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all text-left group border border-transparent
+                ${isMuted ? 'bg-rose-500/10 border-rose-500/20' : 'hover:bg-white/5'}
+              `}
+            >
+              <span className={`text-lg transition-colors ${isMuted ? 'text-rose-400' : 'text-zinc-600 group-hover:text-white'}`}>
+                {isMuted ? '🔇' : '🔊'}
+              </span>
+              <span className={`text-sm font-light tracking-wide transition-colors ${isMuted ? 'text-rose-400' : 'text-zinc-400 group-hover:text-white'}`}>
+                {isMuted ? 'Muted' : 'Sound Enabled'}
               </span>
             </button>
           </div>
