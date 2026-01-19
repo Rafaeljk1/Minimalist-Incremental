@@ -30,6 +30,13 @@ interface FloatingNumber {
   driftX: number;
 }
 
+interface LogEntry {
+  id: string;
+  timestamp: number;
+  message: string;
+  type: 'info' | 'success' | 'warning';
+}
+
 const App: React.FC = () => {
   // Auth States
   const [user, setUser] = useState<GoogleUser | null>(null);
@@ -41,6 +48,8 @@ const App: React.FC = () => {
 
   // UI States
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState<'core' | 'sync' | 'achievements' | 'settings' | 'log'>('core');
+  const [logs, setLogs] = useState<LogEntry[]>([]);
 
   // Game States
   const [gameState, setGameState] = useState<GameState>(INITIAL_STATE);
@@ -51,6 +60,16 @@ const App: React.FC = () => {
   const nextId = useRef(0);
   const audioContextRef = useRef<AudioContext | null>(null);
 
+  const addLog = (message: string, type: LogEntry['type'] = 'info') => {
+    const newLog: LogEntry = {
+      id: Math.random().toString(36).substr(2, 9),
+      timestamp: Date.now(),
+      message,
+      type
+    };
+    setLogs(prev => [newLog, ...prev].slice(0, 50));
+  };
+
   const getUserSaveKey = (userEmail: string) => `${SAVE_KEY}_${userEmail}`;
 
   const loadGameForUser = (userEmail: string) => {
@@ -58,8 +77,10 @@ const App: React.FC = () => {
       const saved = localStorage.getItem(getUserSaveKey(userEmail));
       if (saved) {
         setGameState(JSON.parse(saved));
+        addLog("Neural connection restored. Data sync successful.", "success");
       } else {
         setGameState(INITIAL_STATE);
+        addLog("New neural profile initialized.", "info");
       }
     } catch (e) {
       setGameState(INITIAL_STATE);
@@ -181,6 +202,7 @@ const App: React.FC = () => {
     localStorage.removeItem('aether_user');
     const g = (window as any).google;
     if (g && g.accounts) g.accounts.id.disableAutoSelect();
+    addLog("Neural connection severed.", "warning");
   };
 
   const getAudioContext = useCallback(() => {
@@ -257,6 +279,7 @@ const App: React.FC = () => {
         lastSave: now
       }));
       setOfflineMessage(`Neural synchronization complete. Captured ${formatNumber(earned)} Aether while detached.`);
+      addLog(`Detached synchronization recovered ${formatNumber(earned)} Aether.`, "success");
       setTimeout(() => setOfflineMessage(null), 8000);
     }
   }, [user]);
@@ -335,8 +358,36 @@ const App: React.FC = () => {
         localStorage.setItem(getUserSaveKey(user.email), JSON.stringify(newState));
         return newState;
       });
+      addLog(`Optimization linked: ${upgrade.name} (Lv. ${currentLevel + 1})`, "success");
     }
   }, [gameState.aether, gameState.upgrades, playUpgradeSound, user]);
+
+  const handleResetGame = () => {
+    if (confirm("Warning: This will terminate current neural matrix and reset all progress. Proceed?")) {
+      setGameState(INITIAL_STATE);
+      if (user) localStorage.setItem(getUserSaveKey(user.email), JSON.stringify(INITIAL_STATE));
+      addLog("System initialized. Neural matrix wiped.", "warning");
+      setActiveSection('core');
+      setIsSidebarOpen(false);
+    }
+  };
+
+  const handleSaveGame = () => {
+    if (user) {
+      localStorage.setItem(getUserSaveKey(user.email), JSON.stringify({ ...gameState, lastSave: Date.now() }));
+      setShowSaveToast(true);
+      setTimeout(() => setShowSaveToast(false), 3000);
+      addLog("Manual stream synchronization completed.", "info");
+    }
+  };
+
+  const achievements = [
+    { id: '1k', label: 'Fragmented Origin', desc: 'Earned 1,000 Total Aether', condition: () => gameState.totalAetherEarned >= 1000 },
+    { id: '1m', label: 'Core Maturity', desc: 'Earned 1,000,000 Total Aether', condition: () => gameState.totalAetherEarned >= 1000000 },
+    { id: '1b', label: 'Stellar Extraction', desc: 'Earned 1,000,000,000 Total Aether', condition: () => gameState.totalAetherEarned >= 1000000000 },
+    { id: 'clicks', label: 'Neural Persistence', desc: 'Clicked the orb 1,000 times', condition: () => gameState.clickCount >= 1000 },
+    { id: 'upgrades', label: 'Master Architect', desc: 'Purchased 100 optimizations', condition: () => totalUpgrades >= 100 }
+  ];
 
   if (!user) {
     return (
@@ -392,6 +443,149 @@ const App: React.FC = () => {
     );
   }
 
+  const renderSection = () => {
+    switch (activeSection) {
+      case 'core':
+        return (
+          <div className="flex-1 flex flex-col items-center justify-center p-6 relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <Stats aether={gameState.aether} aps={aps} apc={apc} />
+            <Orb onClick={handleManualClick} intensity={evolutionIntensity} />
+          </div>
+        );
+      case 'sync':
+        return (
+          <div className="flex-1 p-8 md:p-16 max-w-4xl mx-auto w-full animate-in fade-in slide-in-from-bottom-4 duration-700 overflow-y-auto">
+             <h2 className="text-4xl font-extralight tracking-tight mb-2 text-gradient">Synchronizations</h2>
+             <p className="text-zinc-500 text-xs uppercase tracking-widest font-bold mb-12">Matrix Energy Flow Analysis</p>
+             
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="glass p-8 rounded-3xl border-white/5">
+                   <span className="text-[10px] uppercase tracking-widest text-zinc-600 font-bold mb-4 block">Total Potential Output</span>
+                   <div className="text-3xl font-light text-blue-400">+{formatNumber(aps)} <span className="text-sm opacity-40">A/s</span></div>
+                   <p className="mt-4 text-xs text-zinc-500 leading-relaxed">Ambient harvest from active drones and harvesters operating within the primary neural matrix.</p>
+                </div>
+                <div className="glass p-8 rounded-3xl border-white/5">
+                   <span className="text-[10px] uppercase tracking-widest text-zinc-600 font-bold mb-4 block">Resonance Efficiency</span>
+                   <div className="text-3xl font-light text-indigo-400">+{formatNumber(apc)} <span className="text-sm opacity-40">A/c</span></div>
+                   <p className="mt-4 text-xs text-zinc-500 leading-relaxed">Direct synchronization efficiency during manual extraction protocols.</p>
+                </div>
+             </div>
+
+             <div className="mt-12 glass p-8 rounded-3xl border-white/5">
+                <h3 className="text-sm font-bold uppercase tracking-widest mb-6 text-white/80">Active Streams</h3>
+                <div className="space-y-4">
+                   {UPGRADES.filter(u => u.type === 'auto' && (gameState.upgrades[u.id] || 0) > 0).map(u => (
+                     <div key={u.id} className="flex items-center justify-between py-3 border-b border-white/5 last:border-0">
+                        <div className="flex items-center gap-4">
+                           <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                           <span className="text-sm font-light text-zinc-300">{u.name}</span>
+                        </div>
+                        <span className="text-xs font-mono text-zinc-500">+{formatNumber((gameState.upgrades[u.id] || 0) * u.power)}/s</span>
+                     </div>
+                   ))}
+                   {UPGRADES.filter(u => u.type === 'auto' && (gameState.upgrades[u.id] || 0) === 0).length === UPGRADES.filter(u => u.type === 'auto').length && (
+                     <p className="text-zinc-600 text-xs text-center py-4 italic">No active automated streams detected.</p>
+                   )}
+                </div>
+             </div>
+          </div>
+        );
+      case 'achievements':
+        return (
+          <div className="flex-1 p-8 md:p-16 max-w-4xl mx-auto w-full animate-in fade-in slide-in-from-bottom-4 duration-700 overflow-y-auto">
+             <h2 className="text-4xl font-extralight tracking-tight mb-2 text-gradient">Achievements</h2>
+             <p className="text-zinc-500 text-xs uppercase tracking-widest font-bold mb-12">Neural Milestones Reached</p>
+             
+             <div className="grid grid-cols-1 gap-4">
+                {achievements.map(ach => (
+                  <div key={ach.id} className={`glass p-6 rounded-2xl border flex items-center gap-6 transition-all ${ach.condition() ? 'border-blue-500/20 bg-blue-500/5' : 'border-white/5 opacity-50 grayscale'}`}>
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl ${ach.condition() ? 'bg-blue-500/20 text-blue-400' : 'bg-white/5 text-zinc-600'}`}>
+                      {ach.condition() ? '★' : '☆'}
+                    </div>
+                    <div>
+                      <h3 className={`text-sm font-semibold mb-0.5 ${ach.condition() ? 'text-white' : 'text-zinc-500'}`}>{ach.label}</h3>
+                      <p className="text-xs text-zinc-500">{ach.desc}</p>
+                    </div>
+                  </div>
+                ))}
+             </div>
+          </div>
+        );
+      case 'settings':
+        return (
+          <div className="flex-1 p-8 md:p-16 max-w-4xl mx-auto w-full animate-in fade-in slide-in-from-bottom-4 duration-700 overflow-y-auto">
+             <h2 className="text-4xl font-extralight tracking-tight mb-2 text-gradient">Neural Settings</h2>
+             <p className="text-zinc-500 text-xs uppercase tracking-widest font-bold mb-12">Session and Data Management</p>
+             
+             <div className="space-y-8">
+                <section>
+                   <h3 className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-4">Account Metadata</h3>
+                   <div className="glass p-8 rounded-3xl border-white/5 flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <img src={user.picture} className="w-12 h-12 rounded-full border border-white/10" alt="" />
+                        <div>
+                          <p className="text-sm font-medium text-white">{user.name}</p>
+                          <p className="text-xs text-zinc-500">{user.email}</p>
+                        </div>
+                      </div>
+                      <button onClick={handleLogout} className="px-5 py-2 rounded-xl border border-white/10 text-[10px] uppercase tracking-widest font-bold hover:bg-white/5 transition-colors">Detach Profile</button>
+                   </div>
+                </section>
+
+                <section>
+                   <h3 className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-4">Stream Synchronization</h3>
+                   <div className="glass p-8 rounded-3xl border-white/5 space-y-6">
+                      <div className="flex items-center justify-between">
+                         <div>
+                            <p className="text-sm text-zinc-300">Manual Neural Sync</p>
+                            <p className="text-xs text-zinc-600">Force immediate data transmission to neural storage.</p>
+                         </div>
+                         <button onClick={handleSaveGame} className="px-5 py-2 rounded-xl bg-blue-500 text-black text-[10px] uppercase tracking-widest font-bold hover:bg-blue-400 transition-colors">Sync Now</button>
+                      </div>
+                      <div className="h-px bg-white/5" />
+                      <div className="flex items-center justify-between">
+                         <div>
+                            <p className="text-sm text-rose-400">Terminate Matrix</p>
+                            <p className="text-xs text-zinc-600">Irreversibly delete all neural progress in current session.</p>
+                         </div>
+                         <button onClick={handleResetGame} className="px-5 py-2 rounded-xl border border-rose-500/20 text-rose-500 text-[10px] uppercase tracking-widest font-bold hover:bg-rose-500/5 transition-colors">Wipe Data</button>
+                      </div>
+                   </div>
+                </section>
+             </div>
+          </div>
+        );
+      case 'log':
+        return (
+          <div className="flex-1 p-8 md:p-16 max-w-4xl mx-auto w-full animate-in fade-in slide-in-from-bottom-4 duration-700 overflow-hidden flex flex-col">
+             <h2 className="text-4xl font-extralight tracking-tight mb-2 text-gradient">Network Log</h2>
+             <p className="text-zinc-500 text-xs uppercase tracking-widest font-bold mb-12">Real-time Session Activity</p>
+             
+             <div className="flex-1 glass p-6 rounded-3xl border-white/5 font-mono text-[11px] overflow-y-auto space-y-2 bg-black/20">
+                {logs.length === 0 ? (
+                  <p className="text-zinc-700 italic">Listening for neural fluctuations...</p>
+                ) : (
+                  logs.map(log => (
+                    <div key={log.id} className="flex gap-4 group">
+                      <span className="text-zinc-700 select-none">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
+                      <span className={`
+                        ${log.type === 'success' ? 'text-emerald-500' : ''}
+                        ${log.type === 'warning' ? 'text-rose-500' : ''}
+                        ${log.type === 'info' ? 'text-blue-400' : ''}
+                      `}>
+                        {log.message}
+                      </span>
+                    </div>
+                  ))
+                )}
+             </div>
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="min-h-screen w-full flex flex-col md:flex-row bg-[#030305] text-zinc-100 selection:bg-blue-500/30 overflow-x-hidden">
       
@@ -429,18 +623,24 @@ const App: React.FC = () => {
 
         <nav className="flex-1 p-6 space-y-2 overflow-y-auto">
           {[
-            { label: 'Neural Core', icon: '◈' },
-            { label: 'Synchronizations', icon: 'Ξ' },
-            { label: 'Achievements', icon: '★' },
-            { label: 'Neural Settings', icon: '⚙' },
-            { label: 'Network Log', icon: '▤' }
-          ].map((item, idx) => (
+            { id: 'core', label: 'Neural Core', icon: '◈' },
+            { id: 'sync', label: 'Synchronizations', icon: 'Ξ' },
+            { id: 'achievements', label: 'Achievements', icon: '★' },
+            { id: 'settings', label: 'Neural Settings', icon: '⚙' },
+            { id: 'log', label: 'Network Log', icon: '▤' }
+          ].map((item) => (
             <button 
-              key={idx}
-              className="w-full flex items-center gap-4 px-4 py-3 rounded-xl hover:bg-white/5 transition-all text-left group"
+              key={item.id}
+              onClick={() => {
+                setActiveSection(item.id as any);
+                setIsSidebarOpen(false);
+              }}
+              className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all text-left group
+                ${activeSection === item.id ? 'bg-blue-500/10 border border-blue-500/10' : 'hover:bg-white/5 border border-transparent'}
+              `}
             >
-              <span className="text-zinc-600 group-hover:text-blue-400 text-lg transition-colors">{item.icon}</span>
-              <span className="text-sm font-light tracking-wide text-zinc-400 group-hover:text-white transition-colors">{item.label}</span>
+              <span className={`text-lg transition-colors ${activeSection === item.id ? 'text-blue-400' : 'text-zinc-600 group-hover:text-blue-400'}`}>{item.icon}</span>
+              <span className={`text-sm font-light tracking-wide transition-colors ${activeSection === item.id ? 'text-white' : 'text-zinc-400 group-hover:text-white'}`}>{item.label}</span>
             </button>
           ))}
         </nav>
@@ -473,8 +673,8 @@ const App: React.FC = () => {
         <span className="w-5 h-0.5 bg-zinc-400 group-hover:bg-white transition-colors rounded-full" />
       </button>
 
-      {/* HUD Header (Profile - Keep simplified) */}
-      <div className="fixed top-6 right-6 z-[60] flex items-center glass p-1 rounded-full border-white/5 shadow-xl group cursor-pointer" onClick={() => setIsSidebarOpen(true)}>
+      {/* Profile Shortcut (Top Right) */}
+      <div className="fixed top-6 right-6 z-[60] flex items-center glass p-1 rounded-full border-white/5 shadow-xl group cursor-pointer" onClick={() => setActiveSection('settings')}>
         <img src={user.picture} alt="Avatar" className="w-10 h-10 rounded-full border border-white/10 bg-zinc-900 group-hover:border-blue-500/50 transition-colors" />
       </div>
 
@@ -504,12 +704,12 @@ const App: React.FC = () => {
         </div>
       )}
 
-      <main className="flex-1 flex flex-col items-center justify-center p-6 relative z-10 min-h-[60vh] md:min-h-screen">
-        <Stats aether={gameState.aether} aps={aps} apc={apc} />
-        <Orb onClick={handleManualClick} intensity={evolutionIntensity} />
+      <main className="flex-1 flex flex-col relative z-10 min-h-screen">
+        {renderSection()}
       </main>
 
-      <aside className="w-full md:w-[460px] glass md:border-l border-white/[0.05] flex flex-col h-[60vh] md:h-screen relative z-20 shadow-[-20px_0_50px_rgba(0,0,0,0.5)]">
+      {/* Upgrades panel is mostly constant, except maybe in focused log or settings views */}
+      <aside className={`w-full md:w-[460px] glass md:border-l border-white/[0.05] flex flex-col h-[60vh] md:h-screen relative z-20 shadow-[-20px_0_50px_rgba(0,0,0,0.5)] transition-all duration-500 ${activeSection === 'core' ? 'translate-x-0 opacity-100' : 'md:opacity-40 pointer-events-none md:translate-x-8'}`}>
         <div className="p-6 md:p-10 border-b border-white/[0.03] bg-white/[0.01]">
             <div className="flex items-center justify-between mb-2">
                 <h2 className="text-xl md:text-2xl font-extralight tracking-tight text-white/90">Optimizations</h2>
